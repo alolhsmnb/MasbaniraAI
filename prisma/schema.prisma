@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+model User {
+  id              String      @id @default(cuid())
+  email           String      @unique
+  name            String?
+  avatar          String?
+  role            String      @default("USER")
+  dailyCredits    Int         @default(0)
+  paidCredits     Int         @default(0)
+  lastCreditReset String      @default("")
+  isBanned        Boolean     @default(false)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  generations     Generation[]
+  cryptoOrders    CryptoOrder[]
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  key        String    @unique
+  name       String?
+  usageCount Int       @default(0)
+  isActive   Boolean   @default(true)
+  lastUsedAt String?
+  createdAt  DateTime  @default(now())
+}
+
+model AiModel {
+  id        String        @id @default(cuid())
+  modelId   String        @unique
+  name      String
+  type      String        @default("IMAGE")
+  isActive  Boolean       @default(true)
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+  generations Generation[]
+  pricing    ModelPricing?
+}
+
+model Generation {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  modelId     String
+  model       AiModel  @relation(fields: [modelId], references: [id])
+  prompt      String
+  aspectRatio String   @default("1:1")
+  imageSize   String   @default("1K")
+  rotation    Int      @default(0)
+  status      String   @default("PENDING")
+  taskId      String?
+  resultUrl   String?
+  type        String   @default("IMAGE")
+  createdAt   DateTime @default(now())
+}
+
+model SiteSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model ModelPricing {
+  id          String   @id @default(cuid())
+  modelId     String   @unique
+  aiModel     AiModel  @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  pricingJson String   @default("{}")
+  updatedAt   DateTime @updatedAt
+}
+
+model Plan {
+  id        String   @id @default(cuid())
+  name      String
+  price     Float
+  credits   Int
+  features  String   @default("[]")
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  cryptoOrders CryptoOrder[]
+}
+
+model CryptoOrder {
+  id              String   @id @default(cuid())
+  orderId         String   @unique
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId          String?
+  plan            Plan?    @relation(fields: [planId], references: [id])
+  amountUSD       Float
+  credits         Int
+  ticker          String
+  coinName        String
+  addressIn       String
+  addressOut      String
+  callbackUrl     String
+  paymentUri      String?
+  txidIn          String?
+  txidOut         String?
+  valueCoin       Float?
+  valueForwarded  Float?
+  confirmations   Int      @default(0)
+  requiredConf    Int      @default(3)
+  status          String   @default("PENDING")
+  uuid            String?
+  webhookRaw      String?
+  ipAddress       String?
+  expiresAt       DateTime
+  paidAt          DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model CryptoWallet {
+  id                 String   @id @default(cuid())
+  ticker             String   @unique
+  address            String
+  minimumPaymentUSD  Float    @default(5.0)
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model CryptoSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model AdSlot {
+  id         String   @id @default(cuid())
+  name       String
+  provider   String   @default("custom")
+  adCode     String
+  position   String   @default("landing")
+  isActive   Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
