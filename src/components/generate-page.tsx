@@ -318,10 +318,12 @@ export function GeneratePage() {
             if (task.status === 'FAILED') {
               setIsGenerating(false)
               setTaskId(null)
-              toast.error('Generation failed')
+              const errorTitle = (task as any).errorTitle || 'Generation Failed'
+              const errorMessage = (task as any).errorMessage || 'Something went wrong during generation. The content may be inappropriate or there was a server issue. Please try a different prompt.'
+              toast.error(errorTitle, { description: errorMessage })
               setGenerationError({
-                title: 'Generation Failed',
-                message: 'Something went wrong during generation. The content may be inappropriate or there was a server issue. Please try a different prompt.',
+                title: errorTitle,
+                message: errorMessage,
               })
               if (pollRef.current) clearInterval(pollRef.current)
               return
@@ -883,7 +885,7 @@ export function GeneratePage() {
                 <Button
                   className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-semibold h-12 text-base gap-2"
                   onClick={handleGenerate}
-                  disabled={isGenerating || !prompt.trim() || !selectedModel || (credits?.totalCredits ?? 0) < currentCost || isUploading}
+                  disabled={isGenerating || (!prompt.trim() && !currentModelIsImageToVideo) || !selectedModel || (credits?.totalCredits ?? 0) < currentCost || isUploading}
                 >
                   {isGenerating ? (
                     <>

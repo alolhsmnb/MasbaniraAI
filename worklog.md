@@ -23,3 +23,31 @@ Stage Summary:
 - All 9 models/tables created in Supabase
 - Application connects and queries Supabase successfully
 - Connection config: Pooler session mode on port 5432 (both DATABASE_URL and DIRECT_DATABASE_URL)
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Display API errors in generation area for all models (including grok-imagine/image-to-video)
+
+Work Log:
+- Analyzed existing error handling: `generationError` state and display area already existed in frontend
+- Initial generation errors (from /api/generate POST) were already handled with `errorTitle`/`error` response fields
+- Polling FAILED errors showed only generic messages without specific KIE.AI error details
+- Generate button disabled condition prevented `grok-imagine/image-to-video` from working without a prompt (prompt is optional for this model)
+- Updated `/api/generate/[taskId]/route.ts` polling endpoint to:
+  - Extract error messages from KIE.AI `resultJson`/`result` fields when task fails
+  - Map common error types (NSFW, timeout, invalid, rate limit, credits, maintenance) to user-friendly messages
+  - Return `errorTitle` and `errorMessage` in the API response alongside the generation data
+  - Store raw error in `resultUrl` field for history (no DB schema change needed)
+- Updated `generate-page.tsx` `pollTask` callback to:
+  - Read `errorTitle` and `errorMessage` from polling response
+  - Display specific error message in both toast notification and the error display area
+- Fixed Generate button `disabled` prop: changed `!prompt.trim()` to `(!prompt.trim() && !currentModelIsImageToVideo)` so image-to-video works without prompt
+- ESLint passed with no errors
+- Dev server running correctly on port 3000
+
+Stage Summary:
+- Error display now works for ALL models including both `grok-imagine/text-to-video` and `grok-imagine/image-to-video`
+- Both initial API errors and polling failure errors display specific messages in the "Your creation will appear here" area
+- Error messages are categorized: Inappropriate Content, Timeout, Invalid Input, Rate Limited, Service Unavailable, Generation Failed
+- Fixed bug: Generate button now works for image-to-video without requiring a prompt

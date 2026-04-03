@@ -115,10 +115,59 @@ export async function GET(
         } else if (isTaskFailed(taskStatus)) {
           console.error(`[Poll] Task failed: taskId=${taskId}, state=${taskStatus.state}`)
 
+          // Try to extract a specific error message from the KIE.AI response
+          let errorMessage: string | undefined
+          const rawResult = taskStatus.resultJson || taskStatus.result
+          if (typeof rawResult === 'string') {
+            try {
+              const parsed = JSON.parse(rawResult)
+              errorMessage = parsed.error || parsed.message || parsed.msg || parsed.reason || parsed.errorMsg || undefined
+            } catch {
+              // If it's not JSON, use the raw string if it looks like an error
+              if (rawResult.length > 0 && rawResult.length < 500) {
+                errorMessage = rawResult
+              }
+            }
+          } else if (rawResult && typeof rawResult === 'object') {
+            const obj = rawResult as Record<string, unknown>
+            errorMessage = (obj.error || obj.message || obj.msg || obj.reason || obj.errorMsg || undefined) as string | undefined
+          }
+
+          // Map common failure reasons to user-friendly messages
+          let userTitle = 'Generation Failed'
+          let userMessage = 'Something went wrong during generation. Please try a different prompt or settings.'
+
+          if (errorMessage) {
+            const lower = errorMessage.toLowerCase()
+            if (lower.includes('nsfw') || lower.includes('inappropriate') || lower.includes('content policy') || lower.includes('safety')) {
+              userTitle = 'Inappropriate Content'
+              userMessage = 'Your prompt or image was flagged by the safety filter. Please modify your content and try again.'
+            } else if (lower.includes('timeout') || lower.includes('timed out')) {
+              userTitle = 'Timeout'
+              userMessage = 'The generation took too long and timed out. Please try again with simpler settings.'
+            } else if (lower.includes('invalid') || lower.includes('validation')) {
+              userTitle = 'Invalid Input'
+              userMessage = 'The input parameters were invalid. Please check your prompt, image, and settings.'
+            } else if (lower.includes('rate') || lower.includes('too many') || lower.includes('busy')) {
+              userTitle = 'Rate Limited'
+              userMessage = 'The service is currently busy. Please wait a moment and try again.'
+            } else if (lower.includes('credit') || lower.includes('insufficient') || lower.includes('balance')) {
+              userTitle = 'Service Unavailable'
+              userMessage = 'The service is temporarily unavailable due to resource limits. Please contact support.'
+            } else if (lower.includes('maintenance') || lower.includes('unavailable')) {
+              userTitle = 'Service Unavailable'
+              userMessage = 'The AI service is currently under maintenance. Please try again later.'
+            } else {
+              userTitle = 'Generation Failed'
+              userMessage = errorMessage.length > 300 ? errorMessage.substring(0, 300) + '...' : errorMessage
+            }
+          }
+
           const updated = await db.generation.update({
             where: { id: generation.id },
             data: {
               status: 'FAILED',
+              resultUrl: errorMessage || null, // Store error in resultUrl for history
             },
           })
 
@@ -127,6 +176,8 @@ export async function GET(
             data: {
               ...updated,
               model: generation.model,
+              errorTitle: userTitle,
+              errorMessage: userMessage,
             },
           })
         } else {
