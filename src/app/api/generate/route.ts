@@ -191,34 +191,66 @@ export async function POST(request: NextRequest) {
 
     const errorMessage = error instanceof Error ? error.message : 'Failed to create generation'
 
+    // Extract code and msg from the error string (format: "code=430 msg=Some error")
+    const codeMatch = errorMessage.match(/code=(\d+)/)
+    const msgMatch = errorMessage.match(/msg=(.+?)(?:\.?\s*$)/)
+    const apiCode = codeMatch ? parseInt(codeMatch[1]) : null
+    const apiMsg = msgMatch ? msgMatch[1].trim() : null
+
     // Parse known API error codes to provide user-friendly messages
     let userMessage = errorMessage
     let userTitle = 'Generation Failed'
 
-    if (errorMessage.includes('Inappropriate content') || errorMessage.includes('code=430')) {
-      userTitle = 'Inappropriate Content'
-      userMessage = 'Your prompt contains content that was flagged as inappropriate. Please modify your prompt and try again.'
-    } else if (errorMessage.includes('code=402') || errorMessage.includes('Insufficient credits')) {
-      userTitle = 'Insufficient Credits'
-      userMessage = 'The API does not have enough credits. Please contact the administrator.'
-    } else if (errorMessage.includes('code=429') || errorMessage.includes('Rate limit')) {
-      userTitle = 'Rate Limited'
-      userMessage = 'Too many requests. Please wait a moment and try again.'
-    } else if (errorMessage.includes('code=455')) {
-      userTitle = 'Service Unavailable'
-      userMessage = 'The service is currently under maintenance. Please try again later.'
-    } else if (errorMessage.includes('code=500')) {
-      userTitle = 'Server Error'
-      userMessage = 'An unexpected error occurred. Please try again later.'
-    } else if (errorMessage.includes('code=501')) {
-      userTitle = 'Generation Failed'
-      userMessage = 'The content generation task failed. Try a different prompt or settings.'
-    } else if (errorMessage.includes('code=505')) {
-      userTitle = 'Feature Disabled'
-      userMessage = 'This feature is currently disabled. Please contact the administrator.'
-    } else if (errorMessage.includes('code=422')) {
-      userTitle = 'Invalid Parameters'
-      userMessage = 'The request parameters were invalid. Check your settings and try again.'
+    // Map by error code first (more reliable)
+    if (apiCode) {
+      switch (apiCode) {
+        case 401:
+          userTitle = 'Authentication Error'
+          userMessage = 'The API authentication failed. Please contact the administrator.'
+          break
+        case 402:
+          userTitle = 'Insufficient Credits'
+          userMessage = 'The API does not have enough credits. Please contact the administrator.'
+          break
+        case 404:
+          userTitle = 'Not Found'
+          userMessage = 'The requested resource was not found. Please try again later.'
+          break
+        case 422:
+          userTitle = 'Invalid Parameters'
+          userMessage = 'The request parameters were invalid. Check your prompt, image, and settings, then try again.'
+          break
+        case 429:
+          userTitle = 'Rate Limited'
+          userMessage = 'Too many requests. Please wait a moment and try again.'
+          break
+        case 430:
+          userTitle = 'Inappropriate Content'
+          userMessage = 'Your prompt contains content that was flagged as inappropriate. Please modify your prompt and try again.'
+          break
+        case 455:
+          userTitle = 'Service Unavailable'
+          userMessage = 'The service is currently under maintenance. Please try again later.'
+          break
+        case 500:
+          userTitle = 'Server Error'
+          userMessage = 'An unexpected error occurred. Please try again later.'
+          break
+        case 501:
+          userTitle = 'Generation Failed'
+          userMessage = 'The content generation task failed. Try a different prompt or settings.'
+          break
+        case 505:
+          userTitle = 'Feature Disabled'
+          userMessage = 'This feature is currently disabled. Please contact the administrator.'
+          break
+        default:
+          // Unknown code - use the API message if available
+          if (apiMsg) {
+            userMessage = apiMsg.length > 300 ? apiMsg.substring(0, 300) + '...' : apiMsg
+          }
+          break
+      }
     } else if (errorMessage.includes('No active API keys')) {
       userTitle = 'Service Unavailable'
       userMessage = 'No API keys configured. Please contact the administrator.'

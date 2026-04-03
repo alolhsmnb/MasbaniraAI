@@ -51,3 +51,26 @@ Stage Summary:
 - Both initial API errors and polling failure errors display specific messages in the "Your creation will appear here" area
 - Error messages are categorized: Inappropriate Content, Timeout, Invalid Input, Rate Limited, Service Unavailable, Generation Failed
 - Fixed bug: Generate button now works for image-to-video without requiring a prompt
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Improve error handling for all models including Veo, Sora-2, Grok with proper code/msg parsing
+
+Work Log:
+- Fixed critical bug in `kie-api.ts`: Both `createTask` and `createVeoTask` were storing errors as `data.msg || code=${data.code}` which meant when `msg` existed, the error code was lost
+- Changed both functions to always include both code and msg: `code=${data.code} msg=${data.msg || ''}`
+- Rewrote `/api/generate/route.ts` catch block to extract code and msg using regex from the error string
+- Changed from string-contains-based matching to proper `switch(apiCode)` for reliable error code mapping
+- Added all error codes from API spec: 401, 402, 404, 422, 429, 430, 455, 500, 501, 505
+- Enhanced `/api/generate/[taskId]/route.ts` polling endpoint:
+  - Now extracts `code` and `msg` from `resultJson`, `result` object, and top-level `taskStatus`
+  - Added error code-based mapping via `switch(errorCode)` matching the full API spec
+  - Falls back to text-based message matching when no code is available
+- ESLint passed with no errors
+
+Stage Summary:
+- All 9 models (including veo3_fast, sora-2-text-to-video, sora-2-image-to-video, grok-imagine/text-to-video, grok-imagine/image-to-video) now have complete error handling
+- Error flow covers both initial task creation failures AND polling-time failures
+- Error codes are reliably extracted and mapped to user-friendly messages
+- The frontend displays errors in the "Your creation will appear here" area with proper title, message, and Try Again button

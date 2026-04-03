@@ -183,7 +183,7 @@ export async function createTask(
         }
       }
 
-      lastError = data.msg || `code=${data.code}`
+      lastError = `code=${data.code} msg=${data.msg || ''}`
 
       // If retryable error (insufficient credits, rate limit), try next key
       if (isRetryableError(lastError)) {
@@ -459,7 +459,7 @@ export async function createVeoTask(
         }
       }
 
-      lastError = data.msg || `code=${data.code}`
+      lastError = `code=${data.code} msg=${data.msg || ''}`
 
       if (isRetryableError(lastError)) {
         console.warn(`[KIE.AI] ⚠ Key ${apiKey.name || apiKey.id.substring(0, 8)}... failed: ${lastError}. Trying next key...`)
