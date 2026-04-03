@@ -111,6 +111,7 @@ export function GeneratePage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [taskId, setTaskId] = useState<string | null>(null)
   const [currentResult, setCurrentResult] = useState<GenerationResult | null>(null)
+  const [generationError, setGenerationError] = useState<{ title: string; message: string } | null>(null)
   const [recentGenerations, setRecentGenerations] = useState<GenerationResult[]>([])
 
   // Payment modal state
@@ -317,8 +318,10 @@ export function GeneratePage() {
             if (task.status === 'FAILED') {
               setIsGenerating(false)
               setTaskId(null)
-              toast.error('Generation failed', {
-                description: 'Something went wrong. Please try again.',
+              toast.error('Generation failed')
+              setGenerationError({
+                title: 'Generation Failed',
+                message: 'Something went wrong during generation. The content may be inappropriate or there was a server issue. Please try a different prompt.',
               })
               if (pollRef.current) clearInterval(pollRef.current)
               return
@@ -379,6 +382,7 @@ export function GeneratePage() {
     setIsGenerating(true)
     setCurrentResult(null)
     setTaskId(null)
+    setGenerationError(null)
 
     // Collect all image URLs
     const allImageUrls = [
@@ -415,11 +419,21 @@ export function GeneratePage() {
         })
       } else {
         setIsGenerating(false)
-        toast.error(data.error || 'Failed to start generation')
+        const errorMsg = data.error || 'Failed to start generation'
+        const errorTitle = data.errorTitle || 'Generation Failed'
+        toast.error(errorTitle)
+        setGenerationError({
+          title: errorTitle,
+          message: errorMsg,
+        })
       }
     } catch {
       setIsGenerating(false)
       toast.error('Network error. Please try again.')
+      setGenerationError({
+        title: 'Network Error',
+        message: 'Could not reach the server. Please check your connection and try again.',
+      })
     }
   }
 
@@ -999,7 +1013,7 @@ export function GeneratePage() {
                   </motion.div>
                 )
               })()
-            ) : currentResult?.status === 'FAILED' ? (
+            ) : currentResult?.status === 'FAILED' || generationError ? (
               <motion.div
                 className="text-center space-y-4"
                 initial={{ opacity: 0 }}
@@ -1009,12 +1023,12 @@ export function GeneratePage() {
                   <AlertCircle className="size-8 text-red-400" />
                 </div>
                 <div>
-                  <p className="font-medium text-red-400">Generation Failed</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Something went wrong. Please try again.
+                  <p className="font-medium text-red-400">{generationError?.title || 'Generation Failed'}</p>
+                  <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">
+                    {generationError?.message || 'Something went wrong. Please try again.'}
                   </p>
                 </div>
-                <Button variant="outline" size="sm" className="gap-2" onClick={handleGenerate}>
+                <Button variant="outline" size="sm" className="gap-2" onClick={() => { setGenerationError(null); handleGenerate(); }}>
                   <RefreshCw className="size-4" />
                   Try Again
                 </Button>

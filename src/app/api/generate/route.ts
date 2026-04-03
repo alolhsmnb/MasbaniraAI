@@ -189,8 +189,43 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const errorMessage = error instanceof Error ? error.message : 'Failed to create generation'
+
+    // Parse known API error codes to provide user-friendly messages
+    let userMessage = errorMessage
+    let userTitle = 'Generation Failed'
+
+    if (errorMessage.includes('Inappropriate content') || errorMessage.includes('code=430')) {
+      userTitle = 'Inappropriate Content'
+      userMessage = 'Your prompt contains content that was flagged as inappropriate. Please modify your prompt and try again.'
+    } else if (errorMessage.includes('code=402') || errorMessage.includes('Insufficient credits')) {
+      userTitle = 'Insufficient Credits'
+      userMessage = 'The API does not have enough credits. Please contact the administrator.'
+    } else if (errorMessage.includes('code=429') || errorMessage.includes('Rate limit')) {
+      userTitle = 'Rate Limited'
+      userMessage = 'Too many requests. Please wait a moment and try again.'
+    } else if (errorMessage.includes('code=455')) {
+      userTitle = 'Service Unavailable'
+      userMessage = 'The service is currently under maintenance. Please try again later.'
+    } else if (errorMessage.includes('code=500')) {
+      userTitle = 'Server Error'
+      userMessage = 'An unexpected error occurred. Please try again later.'
+    } else if (errorMessage.includes('code=501')) {
+      userTitle = 'Generation Failed'
+      userMessage = 'The content generation task failed. Try a different prompt or settings.'
+    } else if (errorMessage.includes('code=505')) {
+      userTitle = 'Feature Disabled'
+      userMessage = 'This feature is currently disabled. Please contact the administrator.'
+    } else if (errorMessage.includes('code=422')) {
+      userTitle = 'Invalid Parameters'
+      userMessage = 'The request parameters were invalid. Check your settings and try again.'
+    } else if (errorMessage.includes('No active API keys')) {
+      userTitle = 'Service Unavailable'
+      userMessage = 'No API keys configured. Please contact the administrator.'
+    }
+
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Failed to create generation' },
+      { success: false, error: userMessage, errorTitle: userTitle },
       { status: 500 }
     )
   }
