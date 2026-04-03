@@ -74,3 +74,25 @@ Stage Summary:
 - Error flow covers both initial task creation failures AND polling-time failures
 - Error codes are reliably extracted and mapped to user-friendly messages
 - The frontend displays errors in the "Your creation will appear here" area with proper title, message, and Try Again button
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Fix /api/auth/me 401 error - DATABASE_URL shell env override causing SQLite instead of Supabase
+
+Work Log:
+- User reported 401 error at /api/auth/me when logging in
+- Investigated the auth flow: GoogleLoginButton → Google OAuth → callback → set-session → cookie → /api/auth/me
+- Discovered root cause: Shell environment had `DATABASE_URL=file:/home/z/my-project/db/custom.db` (old SQLite path)
+- Next.js uses `dotenv` which does NOT override existing env vars by default
+- This meant the Prisma schema `provider = "postgresql"` was getting the SQLite URL from shell env, not the Supabase URL from .env
+- The running server was actually using SQLite (where user accounts from Supabase don't exist)
+- Fixed by adding `dotenv.config({ override: true })` in `next.config.ts` to force .env values to override shell env
+- Verified: Supabase has 4 users and 9 models; server now returns data from Supabase
+- Note: The 401 at /api/auth/me is NORMAL when the user is not logged in (no session cookie) - the initialize() function handles this gracefully via Promise.allSettled
+
+Stage Summary:
+- Root cause: Shell env `DATABASE_URL` (SQLite) was overriding `.env` file (Supabase PostgreSQL)
+- Fix: Added `dotenv.config({ override: true })` to `next.config.ts`
+- Server now correctly uses Supabase PostgreSQL
+- Login flow should work correctly now with the correct database
