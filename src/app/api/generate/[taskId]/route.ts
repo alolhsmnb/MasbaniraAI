@@ -117,11 +117,13 @@ export async function GET(
 
           // Try to extract a specific error message from the KIE.AI response
           let errorMessage: string | undefined
+          let errorCode: number | undefined
           const rawResult = taskStatus.resultJson || taskStatus.result
           if (typeof rawResult === 'string') {
             try {
               const parsed = JSON.parse(rawResult)
-              errorMessage = parsed.error || parsed.message || parsed.msg || parsed.reason || parsed.errorMsg || undefined
+              errorCode = parsed.code || parsed.error_code || parsed.status || undefined
+              errorMessage = parsed.msg || parsed.error || parsed.message || parsed.reason || parsed.errorMsg || undefined
             } catch {
               // If it's not JSON, use the raw string if it looks like an error
               if (rawResult.length > 0 && rawResult.length < 500) {
@@ -130,33 +132,91 @@ export async function GET(
             }
           } else if (rawResult && typeof rawResult === 'object') {
             const obj = rawResult as Record<string, unknown>
-            errorMessage = (obj.error || obj.message || obj.msg || obj.reason || obj.errorMsg || undefined) as string | undefined
+            errorCode = obj.code || obj.error_code || obj.status as number | undefined
+            errorMessage = (obj.msg || obj.error || obj.message || obj.reason || obj.errorMsg || undefined) as string | undefined
+          }
+
+          // Also check the top-level taskStatus for code/msg (KIE.AI may put them there)
+          if (!errorMessage && (taskStatus as any).msg) {
+            errorMessage = (taskStatus as any).msg as string
+          }
+          if (!errorCode && (taskStatus as any).code) {
+            errorCode = (taskStatus as any).code as number
           }
 
           // Map common failure reasons to user-friendly messages
           let userTitle = 'Generation Failed'
           let userMessage = 'Something went wrong during generation. Please try a different prompt or settings.'
 
-          if (errorMessage) {
+          // First, try mapping by error code (from KIE.AI API)
+          if (errorCode) {
+            switch (errorCode) {
+              case 401:
+                userTitle = 'Authentication Error'
+                userMessage = 'The API authentication failed. Please contact the administrator.'
+                break
+              case 402:
+                userTitle = 'Service Unavailable'
+                userMessage = 'The service has insufficient credits. Please contact the administrator.'
+                break
+              case 422:
+                userTitle = 'Invalid Parameters'
+                userMessage = 'The request parameters were invalid. Check your prompt, image, and settings, then try again.'
+                break
+              case 429:
+                userTitle = 'Rate Limited'
+                userMessage = 'Too many requests. Please wait a moment and try again.'
+                break
+              case 430:
+                userTitle = 'Inappropriate Content'
+                userMessage = 'Your prompt or image was flagged by the safety filter. Please modify your content and try again.'
+                break
+              case 455:
+                userTitle = 'Service Unavailable'
+                userMessage = 'The AI service is currently under maintenance. Please try again later.'
+                break
+              case 500:
+                userTitle = 'Server Error'
+                userMessage = 'An unexpected server error occurred. Please try again later.'
+                break
+              case 501:
+                userTitle = 'Generation Failed'
+                userMessage = 'The content generation task failed. Try a different prompt, image, or settings.'
+                break
+              case 505:
+                userTitle = 'Feature Disabled'
+                userMessage = 'This feature is currently disabled. Please contact the administrator.'
+                break
+              default:
+                // Unknown code - fall through to text-based mapping
+                break
+            }
+          }
+
+          // If no code matched, try mapping by error message text
+          if (errorMessage && userTitle === 'Generation Failed' && userMessage === 'Something went wrong during generation. Please try a different prompt or settings.') {
             const lower = errorMessage.toLowerCase()
-            if (lower.includes('nsfw') || lower.includes('inappropriate') || lower.includes('content policy') || lower.includes('safety')) {
+            if (lower.includes('nsfw') || lower.includes('inappropriate') || lower.includes('content policy') || lower.includes('safety') || lower.includes('code=430')) {
               userTitle = 'Inappropriate Content'
               userMessage = 'Your prompt or image was flagged by the safety filter. Please modify your content and try again.'
             } else if (lower.includes('timeout') || lower.includes('timed out')) {
               userTitle = 'Timeout'
               userMessage = 'The generation took too long and timed out. Please try again with simpler settings.'
-            } else if (lower.includes('invalid') || lower.includes('validation')) {
+            } else if (lower.includes('invalid') || lower.includes('validation') || lower.includes('code=422')) {
               userTitle = 'Invalid Input'
               userMessage = 'The input parameters were invalid. Please check your prompt, image, and settings.'
-            } else if (lower.includes('rate') || lower.includes('too many') || lower.includes('busy')) {
+            } else if (lower.includes('rate') || lower.includes('too many') || lower.includes('busy') || lower.includes('code=429')) {
               userTitle = 'Rate Limited'
               userMessage = 'The service is currently busy. Please wait a moment and try again.'
-            } else if (lower.includes('credit') || lower.includes('insufficient') || lower.includes('balance')) {
+            } else if (lower.includes('credit') || lower.includes('insufficient') || lower.includes('balance') || lower.includes('code=402')) {
               userTitle = 'Service Unavailable'
               userMessage = 'The service is temporarily unavailable due to resource limits. Please contact support.'
-            } else if (lower.includes('maintenance') || lower.includes('unavailable')) {
+            } else if (lower.includes('maintenance') || lower.includes('unavailable') || lower.includes('code=455')) {
               userTitle = 'Service Unavailable'
               userMessage = 'The AI service is currently under maintenance. Please try again later.'
+            } else if (lower.includes('unauthorized') || lower.includes('auth') || lower.includes('code=401')) {
+              userTitle = 'Authentication Error'
+              userMessage = 'The API authentication failed. Please contact the administrator.'
             } else {
               userTitle = 'Generation Failed'
               userMessage = errorMessage.length > 300 ? errorMessage.substring(0, 300) + '...' : errorMessage
