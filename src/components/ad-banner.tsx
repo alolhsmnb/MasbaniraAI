@@ -77,10 +77,9 @@ export function AdBanner({ position, showAds }: AdBannerProps) {
     const wrapper = document.createElement('div')
     wrapper.setAttribute('data-ad-id', currentAd.id)
     wrapper.style.width = '100%'
+    wrapper.style.maxWidth = '100%'
     wrapper.style.minHeight = '90px'
-    wrapper.style.display = 'flex'
-    wrapper.style.alignItems = 'center'
-    wrapper.style.justifyContent = 'center'
+    wrapper.style.overflow = 'hidden'
 
     // Use a combination of innerHTML for HTML + script execution
     const adCode = currentAd.adCode
@@ -118,7 +117,37 @@ export function AdBanner({ position, showAds }: AdBannerProps) {
       container.appendChild(newScript)
     })
 
+    // Responsive scaling: scale down if ad content overflows
+    const scaleDown = () => {
+      if (!wrapper) return
+      const parentWidth = container.offsetWidth
+      const adWidth = wrapper.scrollWidth
+
+      if (adWidth > parentWidth && adWidth > 0) {
+        const scale = parentWidth / adWidth
+        wrapper.style.transform = `scale(${scale})`
+        wrapper.style.transformOrigin = 'top left'
+        // Adjust container height to match scaled content
+        wrapper.style.height = `${wrapper.scrollHeight * scale}px`
+      } else {
+        wrapper.style.transform = ''
+        wrapper.style.transformOrigin = ''
+        wrapper.style.height = ''
+      }
+    }
+
+    // Run scaling after scripts load and periodically (ads may load async)
+    const scaleTimer = setTimeout(scaleDown, 2000)
+    const scaleInterval = setInterval(scaleDown, 3000)
+
+    // Also observe resize
+    const resizeObserver = new ResizeObserver(scaleDown)
+    resizeObserver.observe(container)
+
     return () => {
+      clearTimeout(scaleTimer)
+      clearInterval(scaleInterval)
+      resizeObserver.disconnect()
       if (container) container.innerHTML = ''
     }
   }, [showAds, loaded, ads, currentIndex])
@@ -126,10 +155,10 @@ export function AdBanner({ position, showAds }: AdBannerProps) {
   if (!showAds || !loaded || ads.length === 0) return null
 
   return (
-    <div className="w-full">
+    <div className="w-full max-w-full overflow-hidden">
       <div
         ref={containerRef}
-        className="w-full overflow-hidden rounded-lg bg-white/[0.02] border border-white/[0.05]"
+        className="w-full max-w-full overflow-hidden rounded-lg bg-white/[0.02] border border-white/[0.05]"
         style={{ minHeight: '90px' }}
       />
 
