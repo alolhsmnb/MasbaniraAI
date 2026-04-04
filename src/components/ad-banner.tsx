@@ -117,7 +117,7 @@ export function AdBanner({ position, showAds }: AdBannerProps) {
       container.appendChild(newScript)
     })
 
-    // Responsive scaling: scale down if ad content overflows
+    // Responsive scaling: use CSS zoom to actually shrink the layout box
     const scaleDown = () => {
       if (!wrapper) return
       const parentWidth = container.offsetWidth
@@ -125,11 +125,20 @@ export function AdBanner({ position, showAds }: AdBannerProps) {
 
       if (adWidth > parentWidth && adWidth > 0) {
         const scale = parentWidth / adWidth
-        wrapper.style.transform = `scale(${scale})`
-        wrapper.style.transformOrigin = 'top left'
-        // Adjust container height to match scaled content
-        wrapper.style.height = `${wrapper.scrollHeight * scale}px`
+        // Use zoom property (better than transform - actually changes layout box)
+        // Fallback to transform scale for browsers that don't support zoom
+        if ('zoom' in document.documentElement.style) {
+          wrapper.style.zoom = String(scale)
+          wrapper.style.transform = ''
+          wrapper.style.transformOrigin = ''
+          wrapper.style.height = ''
+        } else {
+          wrapper.style.transform = `scale(${scale})`
+          wrapper.style.transformOrigin = 'top left'
+          wrapper.style.height = `${wrapper.scrollHeight * scale}px`
+        }
       } else {
+        wrapper.style.zoom = ''
         wrapper.style.transform = ''
         wrapper.style.transformOrigin = ''
         wrapper.style.height = ''
@@ -137,17 +146,28 @@ export function AdBanner({ position, showAds }: AdBannerProps) {
     }
 
     // Run scaling after scripts load and periodically (ads may load async)
-    const scaleTimer = setTimeout(scaleDown, 2000)
-    const scaleInterval = setInterval(scaleDown, 3000)
+    const scaleTimer = setTimeout(scaleDown, 1000)
+    const scaleTimer2 = setTimeout(scaleDown, 3000)
+    const scaleTimer3 = setTimeout(scaleDown, 6000)
+    const scaleInterval = setInterval(scaleDown, 5000)
 
     // Also observe resize
     const resizeObserver = new ResizeObserver(scaleDown)
     resizeObserver.observe(container)
 
+    // Observe DOM changes in container (ad scripts add content dynamically)
+    const mutationObserver = new MutationObserver(() => {
+      requestAnimationFrame(scaleDown)
+    })
+    mutationObserver.observe(container, { childList: true, subtree: true })
+
     return () => {
       clearTimeout(scaleTimer)
+      clearTimeout(scaleTimer2)
+      clearTimeout(scaleTimer3)
       clearInterval(scaleInterval)
       resizeObserver.disconnect()
+      mutationObserver.disconnect()
       if (container) container.innerHTML = ''
     }
   }, [showAds, loaded, ads, currentIndex])

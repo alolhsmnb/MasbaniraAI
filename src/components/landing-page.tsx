@@ -125,14 +125,14 @@ export function LandingPage() {
     'Professional AI-powered platform for generating stunning images and videos with cutting-edge models.'
 
   return (
-    <div className="flex flex-col min-h-[calc(100vh-4rem)]">
+    <div className="flex flex-col min-h-[calc(100vh-4rem)] overflow-x-hidden">
       {/* Hero Section */}
       <section className="relative overflow-hidden py-20 sm:py-32 px-4">
         {/* Animated background gradient */}
-        <div className="absolute inset-0 -z-10">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl animate-pulse [animation-delay:1s]" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-500/5 rounded-full blur-3xl" />
+        <div className="absolute inset-0 -z-10 overflow-hidden">
+          <div className="absolute top-1/4 left-1/4 w-64 sm:w-96 h-64 sm:h-96 bg-emerald-500/10 rounded-full blur-3xl animate-pulse" />
+          <div className="absolute bottom-1/4 right-1/4 w-48 sm:w-80 h-48 sm:h-80 bg-teal-500/10 rounded-full blur-3xl animate-pulse [animation-delay:1s]" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 sm:w-[600px] h-72 sm:h-[600px] bg-emerald-500/5 rounded-full blur-3xl" />
         </div>
 
         <motion.div
@@ -210,7 +210,7 @@ export function LandingPage() {
 
       {/* Ad Banner - After Hero */}
       {showAds && (
-        <div className="max-w-4xl mx-auto px-4 mb-4">
+        <div className="max-w-4xl mx-auto px-4 mb-4 overflow-hidden">
           <AdBanner position="landing" showAds={showAds} />
         </div>
       )}
@@ -333,7 +333,7 @@ export function LandingPage() {
 
       {/* Ad Banner - Before Pricing */}
       {showAds && (
-        <div className="max-w-4xl mx-auto px-4 mb-4">
+        <div className="max-w-4xl mx-auto px-4 mb-4 overflow-hidden">
           <AdBanner position="landing" showAds={showAds} />
         </div>
       )}
