@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { writeFile, mkdir } from 'fs/promises'
-import { existsSync } from 'fs'
+import { writeFile, mkdir, unlink, stat, readFile } from 'fs/promises'
+import { existsSync, readdirSync } from 'fs'
 import path from 'path'
 import { requireAdmin, AuthError } from '@/lib/auth'
 
@@ -68,12 +68,20 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const fileName = searchParams.get('file')
+    const action = searchParams.get('action')
 
-    if (fileName) {
-      // Delete specific file
+    // Delete specific file
+    if (fileName && action === 'delete') {
       const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '')
       const filePath = path.join(process.cwd(), 'public', safeName)
-      const { unlink } = await import('fs/promises')
+      
+      // Security: only allow known verification file patterns
+      const allowedPatterns = ['ads.txt', 'ads.html', 'google', 'verify', 'bing', 'robots.txt', 'sitemap']
+      const isAllowed = allowedPatterns.some(p => safeName.toLowerCase().includes(p.toLowerCase()))
+      if (!isAllowed) {
+        return NextResponse.json({ success: false, error: 'Cannot delete this file' }, { status: 403 })
+      }
+
       try {
         await unlink(filePath)
         return NextResponse.json({ success: true, data: { message: 'File deleted' } })
@@ -82,25 +90,70 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // List uploaded verification files (common ones)
-    const { readdirSync } = await import('fs')
-    const publicDir = path.join(process.cwd(), 'public')
-    const verifyFiles = ['ads.txt', 'ads.html', 'googleads.html', 'bing-siteauth.xml', 'robots.txt']
-    const found: string[] = []
-
-    for (const f of verifyFiles) {
-      if (existsSync(path.join(publicDir, f))) {
-        found.push(f)
+    // View file content
+    if (fileName && action === 'view') {
+      const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '')
+      const filePath = path.join(process.cwd(), 'public', safeName)
+      
+      try {
+        const content = await readFile(filePath, 'utf-8')
+        const stats = await stat(filePath)
+        return NextResponse.json({
+          success: true,
+          data: {
+            fileName: safeName,
+            content,
+            size: stats.size,
+            modifiedAt: stats.mtime.toISOString(),
+          },
+        })
+      } catch {
+        return NextResponse.json({ success: false, error: 'File not found' }, { status: 404 })
       }
     }
 
-    // Also check for any .html verification files
+    // List all verification files with metadata
+    const publicDir = path.join(process.cwd(), 'public')
+    const verifyPatterns = ['ads.txt', 'ads.html', 'googleads.html', 'bing-siteauth.xml', 'robots.txt']
+    const found: { fileName: string; size: number; modifiedAt: string }[] = []
+
+    // Check known patterns first
+    for (const f of verifyPatterns) {
+      const fp = path.join(publicDir, f)
+      if (existsSync(fp)) {
+        try {
+          const stats = await stat(fp)
+          found.push({
+            fileName: f,
+            size: stats.size,
+            modifiedAt: stats.mtime.toISOString(),
+          })
+        } catch {
+          found.push({ fileName: f, size: 0, modifiedAt: '' })
+        }
+      }
+    }
+
+    // Check for any verification-like files in public dir
     try {
       const files = readdirSync(publicDir)
       for (const f of files) {
-        if ((f.startsWith('google') || f.startsWith('verify') || f.startsWith('bing')) && 
-            (f.endsWith('.html') || f.endsWith('.txt'))) {
-          if (!found.includes(f)) found.push(f)
+        if (
+          (f.startsWith('google') || f.startsWith('verify') || f.startsWith('bing') || f.startsWith('ads')) &&
+          (f.endsWith('.html') || f.endsWith('.txt') || f.endsWith('.xml'))
+        ) {
+          if (!found.find(ef => ef.fileName === f)) {
+            try {
+              const stats = await stat(path.join(publicDir, f))
+              found.push({
+                fileName: f,
+                size: stats.size,
+                modifiedAt: stats.mtime.toISOString(),
+              })
+            } catch {
+              found.push({ fileName: f, size: 0, modifiedAt: '' })
+            }
+          }
         }
       }
     } catch {

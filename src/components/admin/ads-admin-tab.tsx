@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Plus, Trash2, Edit3, Upload, FileCheck, X, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Plus, Trash2, Edit3, Upload, FileCheck, X, Eye, EyeOff, Loader2, FileText, Download, ExternalLink, FolderOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -24,13 +24,48 @@ interface AdSlot {
   createdAt: string
 }
 
+interface VerifyFile {
+  fileName: string
+  size: number
+  modifiedAt: string
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function formatDate(isoStr: string): string {
+  if (!isoStr) return 'Unknown'
+  try {
+    const date = new Date(isoStr)
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return 'Unknown'
+  }
+}
+
 export function AdsAdminTab() {
   const [ads, setAds] = useState<AdSlot[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingAd, setEditingAd] = useState<AdSlot | null>(null)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
-  const [verifyFiles, setVerifyFiles] = useState<string[]>([])
+  const [verifyFiles, setVerifyFiles] = useState<VerifyFile[]>([])
+
+  // File view dialog
+  const [viewFileOpen, setViewFileOpen] = useState(false)
+  const [viewFileContent, setViewFileContent] = useState('')
+  const [viewFileName, setViewFileName] = useState('')
+  const [viewFileSize, setViewFileSize] = useState(0)
+  const [viewLoading, setViewLoading] = useState(false)
 
   // Form state
   const [formName, setFormName] = useState('')
@@ -62,7 +97,13 @@ export function AdsAdminTab() {
     try {
       const res = await fetch('/api/admin/ads/verify-file')
       const data = await res.json()
-      if (data.success) setVerifyFiles(data.data)
+      if (data.success) {
+        setVerifyFiles(
+          (data.data || []).map((f: string | { fileName: string; size: number; modifiedAt: string }) =>
+            typeof f === 'string' ? { fileName: f, size: 0, modifiedAt: '' } : f
+          )
+        )
+      }
     } catch {
       // silent
     }
@@ -73,12 +114,14 @@ export function AdsAdminTab() {
     fetchVerifyFiles()
   }, [fetchAds, fetchVerifyFiles])
 
-  // Fetch verify files when upload dialog opens
+  // Refresh verify files when dialogs open/close
   useEffect(() => {
-    if (uploadDialogOpen) {
-      fetchVerifyFiles()
-    }
+    if (uploadDialogOpen) fetchVerifyFiles()
   }, [uploadDialogOpen, fetchVerifyFiles])
+
+  useEffect(() => {
+    if (!viewFileOpen) fetchVerifyFiles()
+  }, [viewFileOpen, fetchVerifyFiles])
 
   const resetForm = () => {
     setFormName('')
@@ -217,14 +260,36 @@ export function AdsAdminTab() {
     }
   }
 
-  const handleDeleteFile = async (fileName: string) => {
-    if (!confirm(`Delete "${fileName}"?`)) return
+  const handleViewFile = async (fileName: string) => {
+    setViewFileName(fileName)
+    setViewLoading(true)
+    setViewFileOpen(true)
     try {
-      const res = await fetch(`/api/admin/ads/verify-file?file=${encodeURIComponent(fileName)}`, { method: 'GET' })
+      const res = await fetch(`/api/admin/ads/verify-file?file=${encodeURIComponent(fileName)}&action=view`)
       const data = await res.json()
       if (data.success) {
-        toast.success('File deleted')
-        setVerifyFiles((prev) => prev.filter((f) => f !== fileName))
+        setViewFileContent(data.data.content || '(Empty file)')
+        setViewFileSize(data.data.size || 0)
+      } else {
+        setViewFileContent(`Error: ${data.error || 'Could not read file'}`)
+      }
+    } catch {
+      setViewFileContent('Error: Network error')
+    } finally {
+      setViewLoading(false)
+    }
+  }
+
+  const handleDeleteFile = async (fileName: string) => {
+    if (!confirm(`Delete "${fileName}"?\n\nThis file will be permanently removed.`)) return
+    try {
+      const res = await fetch(`/api/admin/ads/verify-file?file=${encodeURIComponent(fileName)}&action=delete`, { method: 'GET' })
+      const data = await res.json()
+      if (data.success) {
+        toast.success(`"${fileName}" deleted successfully`)
+        fetchVerifyFiles()
+      } else {
+        toast.error(data.error || 'Failed to delete file')
       }
     } catch {
       toast.error('Failed to delete file')
@@ -259,8 +324,8 @@ export function AdsAdminTab() {
           <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" size="sm" className="gap-1.5">
-                <FileCheck className="size-3.5" />
-                Verify File
+                <Upload className="size-3.5" />
+                Upload File
               </Button>
             </DialogTrigger>
             <DialogContent>
@@ -297,22 +362,6 @@ export function AdsAdminTab() {
                     onChange={(e) => setUploadName(e.target.value)}
                   />
                 </div>
-
-                {verifyFiles.length > 0 && (
-                  <div className="space-y-2">
-                    <Label>Existing Files</Label>
-                    <div className="space-y-1.5 max-h-32 overflow-y-auto">
-                      {verifyFiles.map((f) => (
-                        <div key={f} className="flex items-center justify-between bg-muted/50 rounded px-3 py-1.5 text-sm">
-                          <span className="text-muted-foreground font-mono text-xs">/{f}</span>
-                          <button onClick={() => handleDeleteFile(f)} className="text-destructive hover:text-destructive/80">
-                            <Trash2 className="size-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 <Button onClick={handleUpload} disabled={!uploadFile || uploading} className="w-full gap-2">
                   {uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
@@ -402,6 +451,138 @@ export function AdsAdminTab() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Verification Files Card */}
+      <Card className="glass-card">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileCheck className="size-4 text-emerald-400" />
+            Verification Files
+            <Badge variant="secondary" className="text-xs">{verifyFiles.length}</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {verifyFiles.length === 0 ? (
+            <div className="py-8 text-center">
+              <FolderOpen className="size-10 text-muted-foreground/30 mx-auto mb-3" />
+              <p className="text-sm text-muted-foreground">No verification files uploaded</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">
+                Upload files like ads.txt, googleads.html, bing-siteauth.xml for ad company approval
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4 gap-1.5"
+                onClick={() => setUploadDialogOpen(true)}
+              >
+                <Upload className="size-3.5" />
+                Upload First File
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {verifyFiles.map((file) => (
+                <div
+                  key={file.fileName}
+                  className="flex items-center justify-between bg-white/[0.03] rounded-lg p-3 gap-3 group"
+                >
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="size-9 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                      <FileText className="size-4 text-emerald-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium truncate">{file.fileName}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                        {file.size > 0 && <span>{formatFileSize(file.size)}</span>}
+                        {file.modifiedAt && <span>{formatDate(file.modifiedAt)}</span>}
+                        <span className="text-emerald-400/70">/{file.fileName}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => handleViewFile(file.fileName)}
+                      className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                      title="View content"
+                    >
+                      <Eye className="size-3.5 text-blue-400" />
+                    </button>
+                    <a
+                      href={`/${file.fileName}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-lg hover:bg-white/5 transition-colors inline-flex"
+                      title="Open in new tab"
+                    >
+                      <ExternalLink className="size-3.5 text-muted-foreground" />
+                    </a>
+                    <button
+                      onClick={() => handleDeleteFile(file.fileName)}
+                      className="p-2 rounded-lg hover:bg-destructive/10 transition-colors"
+                      title="Delete file"
+                    >
+                      <Trash2 className="size-3.5 text-destructive" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* View File Dialog */}
+      <Dialog open={viewFileOpen} onOpenChange={setViewFileOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="size-4 text-emerald-400" />
+              {viewFileName}
+              {viewFileSize > 0 && (
+                <Badge variant="outline" className="text-xs font-normal">{formatFileSize(viewFileSize)}</Badge>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex gap-2 mb-3">
+            <a
+              href={`/${viewFileName}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex"
+            >
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <ExternalLink className="size-3.5" />
+                Open Live URL
+              </Button>
+            </a>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-destructive hover:text-destructive"
+              onClick={() => {
+                setViewFileOpen(false)
+                handleDeleteFile(viewFileName)
+              }}
+            >
+              <Trash2 className="size-3.5" />
+              Delete File
+            </Button>
+          </div>
+          <div className="flex-1 overflow-auto rounded-lg border border-white/10 bg-black/20">
+            {viewLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="size-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <pre className="p-4 text-xs text-muted-foreground font-mono whitespace-pre-wrap break-all leading-relaxed">
+                {viewFileContent}
+              </pre>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Landing Page Ads */}
       <Card className="glass-card">
