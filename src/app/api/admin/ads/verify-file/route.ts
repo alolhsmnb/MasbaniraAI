@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { writeFile, mkdir, unlink, stat, readFile } from 'fs/promises'
-import { existsSync, readdirSync } from 'fs'
-import path from 'path'
+import { db } from '@/lib/db'
 import { requireAdmin, AuthError } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
@@ -23,7 +21,7 @@ export async function POST(request: NextRequest) {
     
     // Only allow specific extensions
     const allowedExt = ['.html', '.txt', '.xml', '.json']
-    const ext = path.extname(safeName).toLowerCase()
+    const ext = '.' + safeName.split('.').pop()?.toLowerCase()
     if (!allowedExt.includes(ext)) {
       return NextResponse.json(
         { success: false, error: `Only ${allowedExt.join(', ')} files are allowed` },
@@ -36,20 +34,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'File size must be under 100KB' }, { status: 400 })
     }
 
-    const publicDir = path.join(process.cwd(), 'public')
-    if (!existsSync(publicDir)) {
-      await mkdir(publicDir, { recursive: true })
-    }
-
-    const filePath = path.join(publicDir, safeName)
+    // Read file content
     const bytes = await file.arrayBuffer()
-    await writeFile(filePath, Buffer.from(bytes))
+    const content = Buffer.from(bytes).toString('utf-8')
+
+    // Upsert to database
+    await db.verificationFile.upsert({
+      where: { fileName: safeName },
+      update: { content, size: file.size },
+      create: { fileName: safeName, content, size: file.size },
+    })
 
     return NextResponse.json({
       success: true,
       data: {
         fileName: safeName,
-        url: `/${safeName}`,
+        url: `/api/public/verify/${safeName}`,
         size: file.size,
       },
     })
@@ -70,97 +70,52 @@ export async function GET(request: NextRequest) {
     const fileName = searchParams.get('file')
     const action = searchParams.get('action')
 
-    // Delete specific file
+    // Delete specific file from DB
     if (fileName && action === 'delete') {
       const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '')
-      const filePath = path.join(process.cwd(), 'public', safeName)
-      
-      // Security: only allow known verification file patterns
-      const allowedPatterns = ['ads.txt', 'ads.html', 'google', 'verify', 'bing', 'robots.txt', 'sitemap']
-      const isAllowed = allowedPatterns.some(p => safeName.toLowerCase().includes(p.toLowerCase()))
-      if (!isAllowed) {
-        return NextResponse.json({ success: false, error: 'Cannot delete this file' }, { status: 403 })
-      }
-
       try {
-        await unlink(filePath)
+        await db.verificationFile.delete({ where: { fileName: safeName } })
         return NextResponse.json({ success: true, data: { message: 'File deleted' } })
       } catch {
         return NextResponse.json({ success: false, error: 'File not found' }, { status: 404 })
       }
     }
 
-    // View file content
+    // View file content from DB
     if (fileName && action === 'view') {
       const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '')
-      const filePath = path.join(process.cwd(), 'public', safeName)
-      
       try {
-        const content = await readFile(filePath, 'utf-8')
-        const stats = await stat(filePath)
+        const file = await db.verificationFile.findUnique({ where: { fileName: safeName } })
+        if (!file) {
+          return NextResponse.json({ success: false, error: 'File not found' }, { status: 404 })
+        }
         return NextResponse.json({
           success: true,
           data: {
-            fileName: safeName,
-            content,
-            size: stats.size,
-            modifiedAt: stats.mtime.toISOString(),
+            fileName: file.fileName,
+            content: file.content,
+            size: file.size,
+            modifiedAt: file.updatedAt.toISOString(),
           },
         })
       } catch {
-        return NextResponse.json({ success: false, error: 'File not found' }, { status: 404 })
+        return NextResponse.json({ success: false, error: 'Failed to read file' }, { status: 500 })
       }
     }
 
-    // List all verification files with metadata
-    const publicDir = path.join(process.cwd(), 'public')
-    const verifyPatterns = ['ads.txt', 'ads.html', 'googleads.html', 'bing-siteauth.xml', 'robots.txt']
-    const found: { fileName: string; size: number; modifiedAt: string }[] = []
+    // List all verification files from DB
+    const files = await db.verificationFile.findMany({
+      orderBy: { createdAt: 'desc' },
+    })
 
-    // Check known patterns first
-    for (const f of verifyPatterns) {
-      const fp = path.join(publicDir, f)
-      if (existsSync(fp)) {
-        try {
-          const stats = await stat(fp)
-          found.push({
-            fileName: f,
-            size: stats.size,
-            modifiedAt: stats.mtime.toISOString(),
-          })
-        } catch {
-          found.push({ fileName: f, size: 0, modifiedAt: '' })
-        }
-      }
-    }
-
-    // Check for any verification-like files in public dir
-    try {
-      const files = readdirSync(publicDir)
-      for (const f of files) {
-        if (
-          (f.startsWith('google') || f.startsWith('verify') || f.startsWith('bing') || f.startsWith('ads')) &&
-          (f.endsWith('.html') || f.endsWith('.txt') || f.endsWith('.xml'))
-        ) {
-          if (!found.find(ef => ef.fileName === f)) {
-            try {
-              const stats = await stat(path.join(publicDir, f))
-              found.push({
-                fileName: f,
-                size: stats.size,
-                modifiedAt: stats.mtime.toISOString(),
-              })
-            } catch {
-              found.push({ fileName: f, size: 0, modifiedAt: '' })
-            }
-          }
-        }
-      }
-    } catch {
-      // public dir might not exist
-    }
-
-    return NextResponse.json({ success: true, data: found })
+    return NextResponse.json({
+      success: true,
+      data: files.map((f) => ({
+        fileName: f.fileName,
+        size: f.size,
+        modifiedAt: f.updatedAt.toISOString(),
+      })),
+    })
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ success: false, error: error.message }, { status: error.statusCode })

@@ -150,3 +150,12 @@ model AdSlot {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
+
+model VerificationFile {
+  id        String   @id @default(cuid())
+  fileName  String   @unique
+  content   String
+  size      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

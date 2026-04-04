@@ -497,7 +497,7 @@ export function AdsAdminTab() {
                       <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
                         {file.size > 0 && <span>{formatFileSize(file.size)}</span>}
                         {file.modifiedAt && <span>{formatDate(file.modifiedAt)}</span>}
-                        <span className="text-emerald-400/70">/{file.fileName}</span>
+                        <span className="text-emerald-400/70">/api/public/verify/{file.fileName}</span>
                       </div>
                     </div>
                   </div>
@@ -510,7 +510,7 @@ export function AdsAdminTab() {
                       <Eye className="size-3.5 text-blue-400" />
                     </button>
                     <a
-                      href={`/${file.fileName}`}
+                      href={`/api/public/verify/${file.fileName}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="p-2 rounded-lg hover:bg-white/5 transition-colors inline-flex"
@@ -547,7 +547,7 @@ export function AdsAdminTab() {
           </DialogHeader>
           <div className="flex gap-2 mb-3">
             <a
-              href={`/${viewFileName}`}
+              href={`/api/public/verify/${viewFileName}`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex"
