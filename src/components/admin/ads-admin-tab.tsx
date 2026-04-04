@@ -231,8 +231,8 @@ export function AdsAdminTab() {
     }
   }
 
-  const landingAds = ads.filter((a) => a.position === 'landing')
-  const generateAds = ads.filter((a) => a.position === 'generate')
+  const landingAds = ads.filter((a) => a.position === 'landing' || a.position === 'both')
+  const generateAds = ads.filter((a) => a.position === 'generate' || a.position === 'both')
 
   if (loading) {
     return (
