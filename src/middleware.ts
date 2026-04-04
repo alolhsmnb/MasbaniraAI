@@ -12,6 +12,7 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Only intercept root-level files with verification extensions
+  // pathname like: /zerads.txt or /surfvisits.txt
   const segments = pathname.split('/').filter(Boolean)
   const isRootLevel = segments.length === 1
 
@@ -31,12 +32,7 @@ export function middleware(request: NextRequest) {
   return NextResponse.rewrite(rewriteUrl)
 }
 
-// Only match root-level files with these extensions
+// Match all root-level requests - the middleware function itself filters by extension
 export const config = {
-  matcher: [
-    '/:fileName(txt)',
-    '/:fileName(html)',
-    '/:fileName(xml)',
-    '/:fileName(json)',
-  ],
+  matcher: '/:path((?!api|_next|favicon.ico|logo.svg|.*\\..*\\.js|.*\\..*\\.css|.*\\..*\\.png|.*\\..*\\.jpg|.*\\..*\\.svg|.*\\..*\\.ico|.*\\..*\\.woff|.*\\..*\\.woff2).*)',
 }
