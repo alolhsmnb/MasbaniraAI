@@ -231,13 +231,32 @@ export async function GET(
             },
           })
 
+          // Refund credits to user if the generation had a cost
+          let refunded = false
+          if (generation.cost && generation.cost > 0) {
+            try {
+              await db.user.update({
+                where: { id: generation.userId },
+                data: { paidCredits: { increment: generation.cost } },
+              })
+              refunded = true
+              console.log(`[Refund] Refunded ${generation.cost} credits to user ${generation.userId} (task ${taskId} failed)`)
+            } catch (refundErr) {
+              console.error('[Refund] Failed to refund credits:', refundErr)
+            }
+          }
+
+          // Append refund info to message
+          const finalMessage = refunded ? userMessage + ' Credits have been refunded.' : userMessage
+
           return NextResponse.json({
             success: true,
             data: {
               ...updated,
               model: generation.model,
               errorTitle: userTitle,
-              errorMessage: userMessage,
+              errorMessage: finalMessage,
+              refunded,
             },
           })
         } else {

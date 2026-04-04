@@ -59,6 +59,7 @@ model Generation {
   status      String   @default("PENDING")
   taskId      String?
   resultUrl   String?
+  cost        Int      @default(0)
   type        String   @default("IMAGE")
   createdAt   DateTime @default(now())
 }

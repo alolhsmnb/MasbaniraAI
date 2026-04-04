@@ -96,3 +96,35 @@ Stage Summary:
 - Fix: Added `dotenv.config({ override: true })` to `next.config.ts`
 - Server now correctly uses Supabase PostgreSQL
 - Login flow should work correctly now with the correct database
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: Refund user credits when AI provider returns an error
+
+Work Log:
+- Added `cost Int @default(0)` field to Generation model in Prisma schema
+- Pushed schema change to Supabase with `bun run db:push`
+- Updated `/api/generate/route.ts` (POST):
+  - Stored `cost` in generation record when creating task
+  - Added `refundCredits()` helper function that increments `paidCredits`
+  - Added refund logic in catch block when task creation fails
+  - Added "Credits have been refunded." to error messages for provider errors
+- Updated `/api/generate/[taskId]/route.ts` (GET polling):
+  - When task status is FAILED, checks `generation.cost` and refunds to user
+  - Returns `refunded: true` flag in response
+  - Appends refund message to error message
+- Updated `/api/generate/callback/route.ts` (KIE.AI webhook):
+  - When callback reports task failed, refunds credits based on stored cost
+- Updated `generate-page.tsx` frontend:
+  - On FAILED status, reads `refunded` flag from polling response
+  - Shows "Credits Refunded" badge in error display area
+  - Refreshes credits via `/api/user/credits` after refund
+  - Toast notification stays longer (6s) when refund occurred
+- ESLint passed with no errors
+
+Stage Summary:
+- Credits are now automatically refunded when provider errors occur
+- Refund happens in 3 places: initial creation failure, polling failure, callback failure
+- User sees "Credits Refunded" badge and updated credit balance
+- Cost stored in Generation record ensures accurate refund amount

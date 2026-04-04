@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
       taskResult = await createTask(model.modelId, taskInput)
     }
 
-    // Save generation to DB
+    // Save generation to DB with cost
     const generation = await db.generation.create({
       data: {
         userId: user.id,
@@ -167,6 +167,7 @@ export async function POST(request: NextRequest) {
         status: 'PROCESSING',
         taskId: taskResult.taskId,
         type: type || model.type || 'IMAGE',
+        cost,
       },
     })
 
@@ -190,6 +191,16 @@ export async function POST(request: NextRequest) {
     }
 
     const errorMessage = error instanceof Error ? error.message : 'Failed to create generation'
+
+    // Refund credits if task creation failed after deduction
+    try {
+      if (typeof cost === 'number' && cost > 0) {
+        await refundCredits(user.id, cost)
+        console.log(`[Refund] Refunded ${cost} credits to user ${user.id} (creation failed)`)
+      }
+    } catch (refundErr) {
+      console.error('[Refund] Failed to refund credits after creation error:', refundErr)
+    }
 
     // Extract code and msg from the error string (format: "code=430 msg=Some error")
     const codeMatch = errorMessage.match(/code=(\d+)/)
@@ -256,11 +267,26 @@ export async function POST(request: NextRequest) {
       userMessage = 'No API keys configured. Please contact the administrator.'
     }
 
+    // Add refund info to message for provider errors
+    if (apiCode) {
+      userMessage += ' Credits have been refunded.'
+    } else if (errorMessage.includes('No active API keys') || errorMessage.includes('API keys failed')) {
+      userMessage += ' Credits have been refunded.'
+    }
+
     return NextResponse.json(
       { success: false, error: userMessage, errorTitle: userTitle },
       { status: 500 }
     )
   }
+}
+
+// Helper: Refund credits to a user (add to paidCredits)
+async function refundCredits(userId: string, amount: number) {
+  await db.user.update({
+    where: { id: userId },
+    data: { paidCredits: { increment: amount } },
+  })
 }
 
 // Helper: Calculate cost based on model pricing configuration

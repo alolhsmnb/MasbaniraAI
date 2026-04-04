@@ -320,11 +320,22 @@ export function GeneratePage() {
               setTaskId(null)
               const errorTitle = (task as any).errorTitle || 'Generation Failed'
               const errorMessage = (task as any).errorMessage || 'Something went wrong during generation. The content may be inappropriate or there was a server issue. Please try a different prompt.'
-              toast.error(errorTitle, { description: errorMessage })
+              const wasRefunded = (task as any).refunded === true
+              toast.error(errorTitle, { description: errorMessage, duration: wasRefunded ? 6000 : 4000 })
               setGenerationError({
                 title: errorTitle,
                 message: errorMessage,
               })
+              // Refresh credits after refund
+              if (wasRefunded) {
+                try {
+                  const creditsRes = await fetch('/api/user/credits')
+                  if (creditsRes.ok) {
+                    const creditsData = await creditsRes.json()
+                    if (creditsData.success) setCredits(creditsData.data)
+                  }
+                } catch { /* silent */ }
+              }
               if (pollRef.current) clearInterval(pollRef.current)
               return
             }
@@ -1030,6 +1041,11 @@ export function GeneratePage() {
                     {generationError?.message || 'Something went wrong. Please try again.'}
                   </p>
                 </div>
+                {(currentResult as any)?.refunded && (
+                  <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-400 mx-auto">
+                    Credits Refunded
+                  </Badge>
+                )}
                 <Button variant="outline" size="sm" className="gap-2" onClick={() => { setGenerationError(null); handleGenerate(); }}>
                   <RefreshCw className="size-4" />
                   Try Again

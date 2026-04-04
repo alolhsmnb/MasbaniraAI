@@ -112,6 +112,19 @@ export async function POST(request: NextRequest) {
           resultUrl: typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg),
         },
       })
+
+      // Refund credits if the generation had a cost
+      if (generation.cost && generation.cost > 0) {
+        try {
+          await db.user.update({
+            where: { id: generation.userId },
+            data: { paidCredits: { increment: generation.cost } },
+          })
+          console.log(`[Callback Refund] Refunded ${generation.cost} credits to user ${generation.userId} (callback task ${taskId} failed)`)
+        } catch (refundErr) {
+          console.error('[Callback Refund] Failed to refund credits:', refundErr)
+        }
+      }
     } else {
       // Still processing
       console.log(`[Callback] Task ${taskId} state: ${stateOrStatus}, keeping as PROCESSING`)
