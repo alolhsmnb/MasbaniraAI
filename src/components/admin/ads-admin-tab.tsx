@@ -418,13 +418,16 @@ export function AdsAdminTab() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Ad Code (HTML/Script)</Label>
+                  <Label>Ad Code (Script / HTML / Div)</Label>
                   <Textarea
-                    placeholder='<script async src="..."></script>\n<ins class="..."></ins>'
+                    placeholder={`<script async src="..."></script>\n<ins class="..."></ins>\n\nOr HTML/Div banners:\n<div style="width:100%;text-align:center;">\n  <a href="..."><img src="..." alt="banner" /></a>\n</div>`}
                     value={formCode}
                     onChange={(e) => setFormCode(e.target.value)}
                     className="min-h-[120px] font-mono text-xs resize-none overflow-y-auto"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Supports: ad network scripts (AdSense, etc.), HTML div banners, image links, and inline styles.
+                  </p>
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -447,7 +450,8 @@ export function AdsAdminTab() {
         <CardContent className="py-3 px-4">
           <p className="text-sm text-amber-200/80">
             <strong>How ads work:</strong> Ads only show to users with <code className="bg-amber-500/10 px-1.5 py-0.5 rounded text-xs">paidCredits = 0</code>. 
-            Multiple ads rotate every 5 seconds. Upload verification files (ads.txt, etc.) for ad company approval.
+            Multiple ads rotate every 5 seconds. Supports ad scripts (AdSense, PropellerAds, etc.) and HTML/Div banners.
+            Upload verification files (ads.txt, etc.) for ad company approval.
           </p>
         </CardContent>
       </Card>
