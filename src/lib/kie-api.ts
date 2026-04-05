@@ -288,10 +288,11 @@ export function extractResultUrl(result: unknown): string | null {
 
 /**
  * Helper to extract URL from an object with various field names
+ * Handles both image and video URL formats
  */
 function extractFromObject(obj: Record<string, unknown>): string | null {
-  // Direct URL fields
-  for (const field of ['url', 'image_url', 'output_url', 'file_url', 'result', 'image', 'src', 'link', 'download_url']) {
+  // Direct URL fields (including video-specific ones)
+  for (const field of ['url', 'image_url', 'output_url', 'file_url', 'video_url', 'videoUrl', 'mp4_url', 'mp4', 'download_url', 'result', 'image', 'src', 'link']) {
     const val = obj[field]
     if (typeof val === 'string' && (val.startsWith('http://') || val.startsWith('https://'))) {
       return val
@@ -303,6 +304,11 @@ function extractFromObject(obj: Record<string, unknown>): string | null {
     for (const item of obj.resultUrls) {
       if (typeof item === 'string' && (item.startsWith('http://') || item.startsWith('https://'))) {
         return item
+      }
+      // Some APIs return objects with url field in resultUrls
+      if (typeof item === 'object' && item !== null) {
+        const url = extractFromObject(item as Record<string, unknown>)
+        if (url) return url
       }
     }
   }

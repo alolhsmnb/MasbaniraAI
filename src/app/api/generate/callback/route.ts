@@ -84,20 +84,35 @@ export async function POST(request: NextRequest) {
           },
         })
       } else {
-        // Couldn't extract URL, save raw result
-        const jsonResult = typeof resultData === 'string'
-          ? resultData
-          : JSON.stringify(resultData)
+        // Try regex fallback to find any URL in the raw data
+        const rawStr = JSON.stringify(resultData)
+        const urlMatch = rawStr.match(/https?:\/\/[^\s"'<>]+\.(mp4|webm|mov|png|jpg|jpeg|gif|webp)/i)
 
-        console.log(`[Callback] No URL extracted, saving raw result (${jsonResult.length} chars)`)
+        if (urlMatch) {
+          console.log(`[Callback] Found URL via regex fallback: ${urlMatch[0].substring(0, 150)}...`)
+          await db.generation.update({
+            where: { id: generation.id },
+            data: {
+              status: 'COMPLETED',
+              resultUrl: urlMatch[0],
+            },
+          })
+        } else {
+          // Couldn't extract URL, save raw result
+          const jsonResult = typeof resultData === 'string'
+            ? resultData
+            : JSON.stringify(resultData)
 
-        await db.generation.update({
-          where: { id: generation.id },
-          data: {
-            status: 'COMPLETED',
-            resultUrl: jsonResult,
-          },
-        })
+          console.log(`[Callback] No URL extracted, saving raw result (${jsonResult.length} chars). Raw:`, jsonResult.substring(0, 500))
+
+          await db.generation.update({
+            where: { id: generation.id },
+            data: {
+              status: 'COMPLETED',
+              resultUrl: jsonResult,
+            },
+          })
+        }
       }
     } else if (isTaskFailed(statusCheck)) {
       const errorMsg = callbackData.failMsg || callbackData.error || callbackData.msg ||
