@@ -420,13 +420,13 @@ export function AdsAdminTab() {
                 <div className="space-y-2">
                   <Label>Ad Code (Script / HTML / Div)</Label>
                   <Textarea
-                    placeholder={`<script async src="..."></script>\n<ins class="..."></ins>\n\nOr HTML/Div banners:\n<div style="width:100%;text-align:center;">\n  <a href="..."><img src="..." alt="banner" /></a>\n</div>`}
+                    placeholder={`<iframe src="https://example.com/ad" width="728" height="90"></iframe>\n\n<div id="slot"><script src="https://example.com/ad.js" async></script></div>\n\n<script>\n  atOptions = { key: '...', format: 'iframe', height: 60, width: 468 };\n</script>\n<script src="https://example.com/invoke.js"></script>`}
                     value={formCode}
                     onChange={(e) => setFormCode(e.target.value)}
                     className="min-h-[120px] font-mono text-xs resize-none overflow-y-auto"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Supports: ad network scripts (AdSense, etc.), HTML div banners, image links, and inline styles.
+                    Supports: iframes, scripts (AdSense, A-Ads, ZerAds, LinkSlot, etc.), HTML div banners, fetch-based ads, and any combination.
                   </p>
                 </div>
 

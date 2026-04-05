@@ -89,33 +89,29 @@ export function AdBanner({ position, showAds }: AdBannerProps) {
       // Pure HTML/Div/Iframe ad - render directly (preserves comments, structure, iframes)
       wrapper.innerHTML = adCode
     } else {
-      // Ad contains scripts - render HTML first, then execute scripts
-      const temp = document.createElement('div')
-      temp.innerHTML = adCode
+      // Ad contains scripts - render ALL HTML first (preserves structure, nesting, iframes)
+      // innerHTML injects script elements but they are INERT (not executed)
+      wrapper.innerHTML = adCode
 
-      // Move all non-script content (preserves divs, iframes, comments via cloneNode)
-      Array.from(temp.childNodes).forEach((node) => {
-        if (node.nodeName === 'SCRIPT') return
-        wrapper.appendChild(node.cloneNode(true))
-      })
-
-      // Execute script tags (innerHTML doesn't run them)
-      const scripts = temp.querySelectorAll('script')
-      scripts.forEach((script) => {
-        const newScript = document.createElement('script')
+      // Replace each inert script element with a live one IN THE SAME POSITION
+      // This preserves DOM structure (scripts stay inside their parent divs)
+      const inertScripts = wrapper.querySelectorAll('script')
+      inertScripts.forEach((inertScript) => {
+        const liveScript = document.createElement('script')
         // Copy all attributes
-        Array.from(script.attributes).forEach((attr) => {
+        Array.from(inertScript.attributes).forEach((attr) => {
           try {
-            newScript.setAttribute(attr.name, attr.value)
+            liveScript.setAttribute(attr.name, attr.value)
           } catch { /* ignore invalid attrs */ }
         })
-        if (script.src) {
-          newScript.src = script.src
-        } else if (script.textContent) {
-          newScript.textContent = script.textContent
+        if (inertScript.src) {
+          liveScript.src = inertScript.src
+        } else if (inertScript.textContent) {
+          liveScript.textContent = inertScript.textContent
         }
-        newScript.async = false
-        wrapper.appendChild(newScript)
+        liveScript.async = false
+        // Replace inert script with live one in the exact same DOM position
+        inertScript.parentNode?.replaceChild(liveScript, inertScript)
       })
     }
 
