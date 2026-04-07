@@ -9,8 +9,16 @@ echo "[DEV] Installing dependencies..."
 bun install --frozen-lockfile 2>/dev/null || bun install
 
 # Setup database
+# Note: .config is a JuiceFS mount file (not a directory), Prisma v6 tries
+# to load .config/prisma and crashes. Temporarily rename it during prisma commands.
 echo "[DEV] Setting up database..."
-bun run db:push
+if [ -f ".config" ] && [ ! -d ".config" ]; then
+  mv .config .config_juicefs_backup
+  bun run db:push
+  mv .config_juicefs_backup .config
+else
+  bun run db:push
+fi
 
 # Clean build cache for fresh start
 rm -rf .next
