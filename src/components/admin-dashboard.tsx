@@ -11,6 +11,7 @@ import {
   Shield,
   Wallet,
   Megaphone,
+  Share2,
 } from 'lucide-react'
 import { GeneralSettingsTab } from '@/components/admin/general-settings-tab'
 import { UsersTab } from '@/components/admin/users-tab'
@@ -20,6 +21,7 @@ import { PlansTab } from '@/components/admin/plans-tab'
 import { GoogleAuthTab } from '@/components/admin/google-auth-tab'
 import { CryptoAdminTab } from '@/components/admin/crypto-admin-tab'
 import { AdsAdminTab } from '@/components/admin/ads-admin-tab'
+import { SocialLinksTab } from '@/components/admin/social-links-tab'
 
 // ============================================================
 // Main Admin Dashboard
@@ -33,6 +35,7 @@ const adminTabs = [
   { value: 'google-auth', label: 'Google Auth', icon: Shield },
   { value: 'crypto', label: 'Crypto Payments', icon: Wallet },
   { value: 'ads', label: 'Ads', icon: Megaphone },
+  { value: 'social', label: 'Social Links', icon: Share2 },
 ] as const
 
 export function AdminDashboard() {
@@ -96,6 +99,7 @@ export function AdminDashboard() {
                 {adminTab === 'google-auth' && <GoogleAuthTab />}
                 {adminTab === 'crypto' && <CryptoAdminTab />}
                 {adminTab === 'ads' && <AdsAdminTab />}
+                {adminTab === 'social' && <SocialLinksTab />}
               </motion.div>
             </AnimatePresence>
           </div>

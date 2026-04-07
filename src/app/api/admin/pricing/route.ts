@@ -137,7 +137,7 @@ export function getDefaultPricing(modelType: string, modelModelId: string) {
   // Sora2 models use frames instead of duration
   const isSora2 = modelModelId.startsWith('sora-2')
   // Veo models have flat pricing
-  const isVeo = modelModelId === 'veo3_fast'
+  const isVeo = modelModelId.startsWith('veo3')
 
   if (modelType === 'IMAGE') {
     return {
