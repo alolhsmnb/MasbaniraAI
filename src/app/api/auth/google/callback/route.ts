@@ -8,15 +8,6 @@ export const dynamic = 'force-dynamic'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo'
 
-function getBaseUrl(request: NextRequest): string {
-  try {
-    const url = new URL(request.url)
-    return `${url.protocol}//${url.hostname}`
-  } catch {
-    return process.env.NEXTAUTH_URL || 'https://localhost'
-  }
-}
-
 async function exchangeCodeForTokens(code: string, redirectUri: string): Promise<{
   access_token: string
   id_token: string
@@ -110,11 +101,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const code = searchParams.get('code')
     const error = searchParams.get('error')
-    // state contains the origin URL passed by the client (e.g. https://masbanira-ai.vercel.app)
+    // state contains the origin URL passed by the client
     const state = searchParams.get('state')
 
-    // Use state (origin from client) to build redirect_uri - this is always correct
-    // because it was set by the browser which knows the real domain
+    // Use state (origin from client) to build redirect_uri
     const origin = state && state.startsWith('http') ? state : (process.env.NEXTAUTH_URL || 'https://localhost')
     const redirectUri = `${origin}/api/auth/google/callback`
 
@@ -184,81 +174,21 @@ export async function GET(request: NextRequest) {
       await checkAndRefreshCredits(user)
     }
 
-    // Create a temporary auth token (valid for 60 seconds)
-    const tempToken = crypto.randomUUID()
-
-    // Store user data temporarily in DB
-    await db.siteSetting.upsert({
-      where: { key: `temp_auth_${tempToken}` },
-      create: {
-        key: `temp_auth_${tempToken}`,
-        value: JSON.stringify({
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          avatar: user.avatar,
-          role: user.role,
-        }),
-      },
-      update: {
-        value: JSON.stringify({
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          avatar: user.avatar,
-          role: user.role,
-        }),
-      },
+    // Create session cookie directly on this response (no intermediate page)
+    const setCookie = await createSession({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      avatar: user.avatar,
+      role: user.role,
     })
 
-    // Auto-cleanup: delete temp token after 60 seconds
-    setTimeout(() => {
-      db.siteSetting.delete({ where: { key: `temp_auth_${tempToken}` } }).catch(() => {})
-    }, 60000)
+    console.log(`[Google OAuth] User logged in: ${user.email} (role: ${user.role})`)
 
-    // Return HTML page that calls set-session API and then redirects
-    // Use relative URL for set-session so it works on any domain
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Signing in...</title>
-  <style>
-    body { margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #0a0a0a; color: #fff; font-family: system-ui, sans-serif; }
-    .spinner { width: 32px; height: 32px; border: 3px solid rgba(255,255,255,0.1); border-top-color: #10b981; border-radius: 50%; animation: spin 0.8s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-  </style>
-</head>
-<body>
-  <div style="text-align:center">
-    <div class="spinner" style="margin:0 auto 16px"></div>
-    <p>Signing you in...</p>
-  </div>
-  <script>
-    fetch('/api/auth/set-session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tempToken: '${tempToken}' })
-    })
-    .then(res => {
-      if (res.ok) {
-        window.location.replace('/');
-      } else {
-        window.location.replace('/?error=session_failed');
-      }
-    })
-    .catch(() => {
-      window.location.replace('/?error=session_failed');
-    });
-  </script>
-</body>
-</html>`
-
-    return new NextResponse(html, {
-      status: 200,
+    // Redirect to home with session cookie set directly
+    return NextResponse.redirect(`${origin}/`, {
       headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Set-Cookie': setCookie,
       },
     })
   } catch (error) {
