@@ -47,5 +47,11 @@ test
 prompt
 
 server.log
+
+# Sandbox-only files (not for production)
+run-server.sh
+server-guard.js
+worklog.md
+
 # Skills directory
 /skills/
