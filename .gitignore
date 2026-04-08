@@ -49,9 +49,24 @@ prompt
 server.log
 
 # Sandbox-only files (not for production)
+.config
+.config-backup
+.zscripts/
+.accesslog
+.stats
 run-server.sh
 server-guard.js
 worklog.md
+keepalive.sh
+keep-alive.sh
+run-dev.sh
+restart.log
+Caddyfile
+db/*.db
+upload/
+uploads/
+download/
+examples/
 
 # Skills directory
 /skills/
