@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import {
   Dialog,
   DialogContent,
@@ -169,6 +170,7 @@ export function VodafoneCashModal({ open, onClose }: VodafoneCashModalProps) {
     return (
       <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
         <DialogContent className="sm:max-w-md p-0 bg-background/95 backdrop-blur-xl border-white/10">
+          <VisuallyHidden><DialogTitle>Vodafone Cash</DialogTitle></VisuallyHidden>
           <div className="p-6 space-y-4">
             <Skeleton className="h-6 w-48" />
             <Skeleton className="h-24 w-full" />
@@ -183,6 +185,7 @@ export function VodafoneCashModal({ open, onClose }: VodafoneCashModalProps) {
     return (
       <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
         <DialogContent className="sm:max-w-md p-0 bg-background/95 backdrop-blur-xl border-white/10">
+          <VisuallyHidden><DialogTitle>Vodafone Cash Unavailable</DialogTitle></VisuallyHidden>
           <div className="p-6 text-center">
             <AlertCircle className="size-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2">Vodafone Cash Unavailable</h3>
