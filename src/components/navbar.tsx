@@ -30,13 +30,16 @@ import {
   User,
   CreditCard,
   Sparkles,
+  Phone,
 } from 'lucide-react'
 import { CryptoPaymentModal } from '@/components/crypto-payment-modal'
+import { VodafoneCashModal } from '@/components/vodafone-cash-modal'
 
 export function Navbar() {
   const { user, isAuthenticated, credits, settings, setView, setAdminTab, logout } = useAppStore()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [paymentOpen, setPaymentOpen] = useState(false)
+  const [vcPaymentOpen, setVcPaymentOpen] = useState(false)
   const siteName = settings?.site_name || 'PixelForge AI'
 
   const isAdmin = user?.role === 'ADMIN'
@@ -130,7 +133,7 @@ export function Navbar() {
                   </Badge>
                 )}
 
-                {/* Buy Credits button */}
+                {/* Buy Credits buttons */}
                 <Button
                   size="sm"
                   onClick={() => setPaymentOpen(true)}
@@ -138,6 +141,15 @@ export function Navbar() {
                 >
                   <Plus className="size-3.5" />
                   <span className="hidden sm:inline">Buy Credits</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setVcPaymentOpen(true)}
+                  className="gap-1.5 border-red-500/30 bg-red-500/5 hover:bg-red-500/10 text-red-400 hover:text-red-300"
+                >
+                  <Phone className="size-3.5" />
+                  <span className="hidden sm:inline">Vodafone Cash</span>
                 </Button>
 
                 {/* User avatar dropdown */}
@@ -221,14 +233,23 @@ export function Navbar() {
                         </div>
                       )}
 
-                      {/* Buy Credits button */}
+                      {/* Buy Credits buttons */}
                       <Button
                         size="sm"
                         onClick={() => setPaymentOpen(true)}
                         className="w-full gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white"
                       >
                         <Plus className="size-4" />
-                        Buy Credits
+                        Buy Credits (Crypto)
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setVcPaymentOpen(true)}
+                        className="w-full gap-2 border-red-500/30 bg-red-500/5 hover:bg-red-500/10 text-red-400 hover:text-red-300"
+                      >
+                        <Phone className="size-4" />
+                        Vodafone Cash
                       </Button>
 
                       <div className="h-px bg-white/10 my-1" />
@@ -282,6 +303,11 @@ export function Navbar() {
       <CryptoPaymentModal
         open={paymentOpen}
         onClose={() => setPaymentOpen(false)}
+      />
+      {/* Vodafone Cash Payment Modal */}
+      <VodafoneCashModal
+        open={vcPaymentOpen}
+        onClose={() => setVcPaymentOpen(false)}
       />
     </nav>
   )

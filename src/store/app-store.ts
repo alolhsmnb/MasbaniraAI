@@ -16,7 +16,7 @@ interface Credits {
 
 interface AppState {
   currentView: 'landing' | 'generate' | 'history' | 'admin'
-  adminTab: 'general' | 'users' | 'models' | 'api-keys' | 'plans' | 'google-auth' | 'crypto' | 'ads' | 'social'
+  adminTab: 'general' | 'users' | 'models' | 'api-keys' | 'plans' | 'google-auth' | 'crypto' | 'ads' | 'social' | 'vodafone-cash'
   user: User | null
   isAuthenticated: boolean
   isLoading: boolean

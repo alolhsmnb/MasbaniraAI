@@ -9,19 +9,21 @@ datasource db {
 }
 
 model User {
-  id              String      @id @default(cuid())
-  email           String      @unique
-  name            String?
-  avatar          String?
-  role            String      @default("USER")
-  dailyCredits    Int         @default(0)
-  paidCredits     Int         @default(0)
-  lastCreditReset String      @default("")
-  isBanned        Boolean     @default(false)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  generations     Generation[]
-  cryptoOrders    CryptoOrder[]
+  id                String      @id @default(cuid())
+  email             String      @unique
+  name              String?
+  avatar            String?
+  role              String      @default("USER")
+  dailyCredits      Int         @default(0)
+  paidCredits       Int         @default(0)
+  lastCreditReset   String      @default("")
+  isBanned          Boolean     @default(false)
+  vodafoneCashNumber String?    @unique
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  generations       Generation[]
+  cryptoOrders      CryptoOrder[]
+  vodafoneTransactions VodafoneCashTransaction[]
 }
 
 model ApiKey {
@@ -158,4 +160,21 @@ model VerificationFile {
   size      Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model VodafoneCashTransaction {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  trxId       String   @unique
+  sender      String
+  message     String
+  fromNumber  String
+  amountEGP   Float
+  creditsAdded Int     @default(0)
+  status      String   @default("PENDING")
+  processedAt DateTime?
+  rawSms      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

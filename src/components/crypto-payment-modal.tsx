@@ -250,7 +250,7 @@ function CryptoIcon({ ticker, size = 40 }: { ticker: string; size?: number }) {
 }
 
 // ─── Copy Button ─────────────────────────────────────────────
-function CopyButton({ text, className = '' }: { text: string; className?: string }) {
+export function CopyButton({ text, className = '' }: { text: string; className?: string }) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {

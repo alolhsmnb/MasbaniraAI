@@ -12,6 +12,7 @@ import {
   Wallet,
   Megaphone,
   Share2,
+  Phone,
 } from 'lucide-react'
 import { GeneralSettingsTab } from '@/components/admin/general-settings-tab'
 import { UsersTab } from '@/components/admin/users-tab'
@@ -22,6 +23,7 @@ import { GoogleAuthTab } from '@/components/admin/google-auth-tab'
 import { CryptoAdminTab } from '@/components/admin/crypto-admin-tab'
 import { AdsAdminTab } from '@/components/admin/ads-admin-tab'
 import { SocialLinksTab } from '@/components/admin/social-links-tab'
+import { VodafoneCashAdminTab } from '@/components/admin/vodafone-cash-admin-tab'
 
 // ============================================================
 // Main Admin Dashboard
@@ -36,6 +38,7 @@ const adminTabs = [
   { value: 'crypto', label: 'Crypto Payments', icon: Wallet },
   { value: 'ads', label: 'Ads', icon: Megaphone },
   { value: 'social', label: 'Social Links', icon: Share2 },
+  { value: 'vodafone-cash', label: 'Vodafone Cash', icon: Phone },
 ] as const
 
 export function AdminDashboard() {
@@ -100,6 +103,7 @@ export function AdminDashboard() {
                 {adminTab === 'crypto' && <CryptoAdminTab />}
                 {adminTab === 'ads' && <AdsAdminTab />}
                 {adminTab === 'social' && <SocialLinksTab />}
+                {adminTab === 'vodafone-cash' && <VodafoneCashAdminTab />}
               </motion.div>
             </AnimatePresence>
           </div>
