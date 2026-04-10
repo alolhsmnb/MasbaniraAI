@@ -17,7 +17,7 @@ async function exchangeCodeForTokens(code: string, redirectUri: string): Promise
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET
 
   if (!clientId || !clientSecret) {
-    throw new Error('Google OAuth is not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.')
+    throw new Error('Google OAuth is not configured.')
   }
 
   const response = await fetch(GOOGLE_TOKEN_URL, {
@@ -35,7 +35,7 @@ async function exchangeCodeForTokens(code: string, redirectUri: string): Promise
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}))
     console.error('Token exchange error:', errorData)
-    throw new Error(`Failed to exchange code for tokens: ${response.status}`)
+    throw new Error(`Failed to exchange code: ${response.status}`)
   }
 
   return response.json()
@@ -72,11 +72,9 @@ async function checkAndRefreshCredits(user: {
     lastReset = new Date(user.lastCreditReset)
   }
 
-  // Check if last reset was more than 24 hours ago
   const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
 
   if (!lastReset || lastReset < twentyFourHoursAgo) {
-    // Get daily free credits setting
     const setting = await db.siteSetting.findUnique({
       where: { key: 'daily_free_credits' },
     })
@@ -101,11 +99,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const code = searchParams.get('code')
     const error = searchParams.get('error')
-    // state contains the origin URL passed by the client
     const state = searchParams.get('state')
 
-    // Use state (origin from client) to build redirect_uri
-    const origin = state && state.startsWith('http') ? state : (process.env.NEXTAUTH_URL || 'https://localhost')
+    const origin = state && state.startsWith('http') ? state : (process.env.NEXTAUTH_URL || '/')
     const redirectUri = `${origin}/api/auth/google/callback`
 
     if (error) {
@@ -117,7 +113,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${origin}/?error=no_code`)
     }
 
-    // Exchange code for tokens using the dynamic redirect URI
+    // Exchange code for tokens
     const tokens = await exchangeCodeForTokens(code, redirectUri)
 
     // Get user info
@@ -127,7 +123,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${origin}/?error=unverified_email`)
     }
 
-    // Create or update user in DB
+    // Create or update user
     const existingUser = await db.user.findUnique({
       where: { email: userInfo.email },
     })
@@ -144,13 +140,11 @@ export async function GET(request: NextRequest) {
         },
       })
     } else {
-      // Check if this user should be admin
       const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL
       const role = adminEmail && adminEmail.toLowerCase() === userInfo.email.toLowerCase()
         ? 'ADMIN'
         : 'USER'
 
-      // Get daily free credits for new user welcome bonus
       const setting = await db.siteSetting.findUnique({
         where: { key: 'daily_free_credits' },
       })
@@ -169,31 +163,78 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Check and refresh credits for existing users
     if (existingUser) {
       await checkAndRefreshCredits(user)
     }
 
-    // Create session cookie directly on this response (no intermediate page)
-    const setCookie = await createSession({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      avatar: user.avatar,
-      role: user.role,
-    })
+    // Generate temp token and store user data
+    const crypto = await import('crypto')
+    const tempToken = crypto.randomBytes(24).toString('hex')
+
+    try {
+      await db.siteSetting.create({
+        data: {
+          key: `temp_auth_${tempToken}`,
+          value: JSON.stringify({
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            avatar: user.avatar,
+            role: user.role,
+          }),
+        },
+      })
+    } catch {
+      await db.siteSetting.delete({ where: { key: `temp_auth_${tempToken}` } }).catch(() => {})
+      await db.siteSetting.create({
+        data: {
+          key: `temp_auth_${tempToken}`,
+          value: JSON.stringify({
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            avatar: user.avatar,
+            role: user.role,
+          }),
+        },
+      })
+    }
 
     console.log(`[Google OAuth] User logged in: ${user.email} (role: ${user.role})`)
 
-    // Redirect to home with session cookie set directly
-    return NextResponse.redirect(`${origin}/`, {
-      headers: {
-        'Set-Cookie': setCookie,
-      },
+    // Return HTML page that calls set-session with ABSOLUTE URL then redirects
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Signing in...</title></head><body>
+<script>
+(function(){
+  fetch('${origin}/api/auth/set-session',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    credentials:'same-origin',
+    body:JSON.stringify({tempToken:'${tempToken}'})
+  }).then(function(r){return r.json()}).then(function(d){
+    if(d.success){
+      window.location.replace('${origin}/');
+    }else{
+      console.error('set-session failed:',d.error);
+      window.location.replace('${origin}/?error=session_failed');
+    }
+  }).catch(function(e){
+    console.error('set-session error:',e);
+    window.location.replace('${origin}/?error=session_error');
+  });
+})();
+</script>
+<noscript><meta http-equiv="refresh" content="0;url=${origin}/"></noscript>
+</body></html>`
+
+    return new NextResponse(html, {
+      status: 200,
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
     })
   } catch (error) {
     console.error('Google OAuth callback error:', error)
-    const fallback = process.env.NEXTAUTH_URL || 'https://localhost'
+    const fallback = process.env.NEXTAUTH_URL || '/'
     return NextResponse.redirect(
       `${fallback}/?error=${encodeURIComponent(error instanceof Error ? error.message : 'Authentication failed')}`
     )
