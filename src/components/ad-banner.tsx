@@ -13,11 +13,54 @@ interface AdBannerProps {
   showAds: boolean
 }
 
+/**
+ * Sequentially inject scripts from ad code into a wrapper element.
+ * External scripts (with src) are loaded in order — each must finish
+ * before the next script runs. This ensures ad networks like Surfe.pro
+ * that rely on a loader script (net.js) + inline push work correctly.
+ */
+async function injectScriptsSequentially(
+  wrapper: HTMLElement,
+  inertScripts: HTMLScriptElement[]
+): Promise<void> {
+  for (const inertScript of inertScripts) {
+    const liveScript = document.createElement('script')
+
+    // Copy all attributes
+    Array.from(inertScript.attributes).forEach((attr) => {
+      try {
+        liveScript.setAttribute(attr.name, attr.value)
+      } catch {
+        // ignore invalid attrs
+      }
+    })
+
+    if (inertScript.src) {
+      // External script — wait for it to load before continuing
+      liveScript.src = inertScript.src
+      liveScript.async = false
+      inertScript.parentNode?.replaceChild(liveScript, inertScript)
+
+      await new Promise<void>((resolve) => {
+        liveScript.onload = () => resolve()
+        liveScript.onerror = () => resolve() // don't block on error
+      })
+    } else {
+      // Inline script — execute immediately
+      liveScript.textContent = inertScript.textContent || ''
+      inertScript.parentNode?.replaceChild(liveScript, inertScript)
+      // Small tick so the DOM update settles before the next iteration
+      await new Promise<void>((r) => setTimeout(r, 0))
+    }
+  }
+}
+
 export function AdBanner({ position, showAds }: AdBannerProps) {
   const [ads, setAds] = useState<AdData[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [loaded, setLoaded] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const abortRef = useRef(false)
 
   // Fetch ads
   useEffect(() => {
@@ -66,15 +109,14 @@ export function AdBanner({ position, showAds }: AdBannerProps) {
     const container = containerRef.current
     if (!container) return
 
-    // Clear previous content
-    container.innerHTML = ''
+    abortRef.current = false
 
     const currentAd = ads[currentIndex]
     if (!currentAd) return
 
     const adCode = currentAd.adCode
 
-    // Create wrapper - minimal styling to not interfere with ad content
+    // Create wrapper
     const wrapper = document.createElement('div')
     wrapper.setAttribute('data-ad-id', currentAd.id)
     wrapper.style.width = '100%'
@@ -86,36 +128,23 @@ export function AdBanner({ position, showAds }: AdBannerProps) {
     const hasScripts = /<script[\s>]/i.test(adCode)
 
     if (!hasScripts) {
-      // Pure HTML/Div/Iframe ad - render directly (preserves comments, structure, iframes)
+      // Pure HTML/Div/Iframe ad — render directly
       wrapper.innerHTML = adCode
     } else {
-      // Ad contains scripts - render ALL HTML first (preserves structure, nesting, iframes)
-      // innerHTML injects script elements but they are INERT (not executed)
+      // Ad contains scripts — render HTML first (scripts are INERT)
       wrapper.innerHTML = adCode
 
-      // Replace each inert script element with a live one IN THE SAME POSITION
-      // This preserves DOM structure (scripts stay inside their parent divs)
-      const inertScripts = wrapper.querySelectorAll('script')
-      inertScripts.forEach((inertScript) => {
-        const liveScript = document.createElement('script')
-        // Copy all attributes
-        Array.from(inertScript.attributes).forEach((attr) => {
-          try {
-            liveScript.setAttribute(attr.name, attr.value)
-          } catch { /* ignore invalid attrs */ }
-        })
-        if (inertScript.src) {
-          liveScript.src = inertScript.src
-        } else if (inertScript.textContent) {
-          liveScript.textContent = inertScript.textContent
-        }
-        liveScript.async = false
-        // Replace inert script with live one in the exact same DOM position
-        inertScript.parentNode?.replaceChild(liveScript, inertScript)
+      // Collect all inert script elements
+      const inertScripts = Array.from(wrapper.querySelectorAll('script'))
+
+      // Inject scripts sequentially so external scripts load before inline ones
+      injectScriptsSequentially(wrapper, inertScripts).catch(() => {
+        // Silently handle injection errors
       })
     }
 
     return () => {
+      abortRef.current = true
       if (container) container.innerHTML = ''
     }
   }, [showAds, loaded, ads, currentIndex])
