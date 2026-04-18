@@ -138,6 +138,8 @@ export function getDefaultPricing(modelType: string, modelModelId: string) {
   const isSora2 = modelModelId.startsWith('sora-2')
   // Veo models have flat pricing
   const isVeo = modelModelId.startsWith('veo3')
+  // Seedance has fixed settings, uses flat pricing
+  const isSeedance = modelModelId === 'bytedance/seedance-2-fast'
 
   if (modelType === 'IMAGE') {
     return {
@@ -161,7 +163,7 @@ export function getDefaultPricing(modelType: string, modelModelId: string) {
     }
   }
 
-  if (isVeo) {
+  if (isVeo || isSeedance) {
     return {
       format: 'flat',
       tiers: {

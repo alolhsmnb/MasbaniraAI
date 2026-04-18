@@ -146,7 +146,7 @@ export function ModelsTab() {
   const getPricingFormType = (model: any) => {
     if (model.type === 'IMAGE') return 'resolution'
     if (model.modelId.startsWith('sora-2')) return 'frames'
-    if (model.modelId.startsWith('veo3')) return 'flat'
+    if (model.modelId.startsWith('veo3') || model.modelId === 'bytedance/seedance-2-fast') return 'flat'
     return 'duration_resolution'
   }
 
