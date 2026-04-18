@@ -111,7 +111,7 @@ export function GeneratePage() {
   // Seedance state
   const [seedanceDuration, setSeedanceDuration] = useState(5)
   const [seedanceResolution, setSeedanceResolution] = useState('720p')
-  const [seedanceGenerateAudio, setSeedanceGenerateAudio] = useState(false)
+  const [seedanceGenerateAudio, setSeedanceGenerateAudio] = useState(true)
   const [seedanceWebSearch, setSeedanceWebSearch] = useState(false)
   const [seedanceRefVideoUrls, setSeedanceRefVideoUrls] = useState<string[]>([])
   const [seedanceRefAudioUrls, setSeedanceRefAudioUrls] = useState<string[]>([])
