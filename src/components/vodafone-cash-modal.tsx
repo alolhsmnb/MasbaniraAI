@@ -428,14 +428,14 @@ export function VodafoneCashModal({ open, onClose }: VodafoneCashModalProps) {
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">Rate</span>
                     <span className="text-sm font-medium text-emerald-400">
-                      {settings.creditsPerEgp} credit per 1 EGP
+                      1 credit = {settings.creditsPerEgp} EGP
                     </span>
                   </div>
                   <Separator className="bg-white/5" />
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">Minimum</span>
                     <span className="text-sm font-medium">
-                      {settings.minAmountEGP} EGP ({settings.minAmountEGP * settings.creditsPerEgp} credits)
+                      {settings.minAmountEGP} EGP ({Math.floor(settings.minAmountEGP / settings.creditsPerEgp)} credits)
                     </span>
                   </div>
                 </div>
