@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     const settings = await db.siteSetting.findMany({
       where: {
         key: {
-          in: ['vodafone_merchant_number', 'vodafone_credits_per_egp', 'vodafone_webhook_secret'],
+          in: ['vodafone_merchant_number', 'vodafone_credits_per_egp', 'vodafone_webhook_secret', 'vodafone_min_amount_egp'],
         },
       },
     })
@@ -85,6 +85,29 @@ export async function POST(request: NextRequest) {
 
     const creditsPerEgp = parseFloat(settingsMap.vodafone_credits_per_egp || '1')
     const webhookSecret = settingsMap.vodafone_webhook_secret || ''
+    const minAmountEGP = parseFloat(settingsMap.vodafone_min_amount_egp || '0')
+
+    // Check minimum amount (0 means no minimum)
+    if (minAmountEGP > 0 && amount < minAmountEGP) {
+      // Still record the transaction as rejected so admin can see it
+      await db.vodafoneCashTransaction.create({
+        data: {
+          trxId: trx_id,
+          sender: sender,
+          message: message || '',
+          fromNumber: normalizedNumber,
+          amountEGP: amount,
+          rawSms: JSON.stringify(body),
+          status: 'REJECTED',
+        },
+      })
+      console.log(`[VodafoneCash] 🚫 Amount ${amount} EGP below minimum ${minAmountEGP} EGP`)
+      return NextResponse.json({
+        success: true,
+        message: `Amount ${amount} EGP is below minimum ${minAmountEGP} EGP`,
+        data: { trxId: trx_id, status: 'REJECTED', reason: 'below_minimum' },
+      })
+    }
 
     // Verify webhook secret if configured
     if (webhookSecret) {
