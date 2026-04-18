@@ -32,6 +32,7 @@ import {
   X,
   ImagePlus,
 } from 'lucide-react'
+import { compressImage } from '@/lib/utils'
 import { CryptoPaymentModal } from '@/components/crypto-payment-modal'
 import { AdBanner } from '@/components/ad-banner'
 
@@ -230,8 +231,19 @@ export function GeneratePage() {
     setIsUploading(true)
 
     try {
+      // Compress images on client side to avoid Vercel 4.5MB body limit
+      const compressedFiles = await Promise.all(
+        toUpload.map(async (file) => {
+          if (file.size > 3.5 * 1024 * 1024) {
+            const compressed = await compressImage(file, 3.5, 4096)
+            return compressed
+          }
+          return file
+        })
+      )
+
       const formData = new FormData()
-      toUpload.forEach((file) => formData.append('images', file))
+      compressedFiles.forEach((file) => formData.append('images', file))
 
       const res = await fetch('/api/upload', {
         method: 'POST',
@@ -609,7 +621,7 @@ export function GeneratePage() {
                         <>
                           <Upload className="size-6 mx-auto text-muted-foreground group-hover:text-emerald-400 transition-colors" />
                           <p className="text-xs text-muted-foreground mt-2">
-                            Click to upload images (JPEG, PNG, WebP · Max 30MB each)
+                            Click to upload images (JPEG, PNG, WebP · Large images auto-compressed)
                           </p>
                         </>
                       )}
