@@ -101,7 +101,13 @@ export async function GET(request: NextRequest) {
     const error = searchParams.get('error')
     const state = searchParams.get('state')
 
-    const origin = state && state.startsWith('http') ? state : (process.env.NEXTAUTH_URL || '/')
+    const origin = state && state.startsWith('http') ? state.split('|')[0] : (process.env.NEXTAUTH_URL || '/')
+    // Extract return URL from state (format: "origin|/path?query#hash")
+    let returnTo = '/'
+    if (state && state.includes('|')) {
+      const parts = state.split('|')
+      if (parts[1]) returnTo = parts[1]
+    }
     const redirectUri = `${origin}/api/auth/google/callback`
 
     if (error) {
@@ -214,7 +220,7 @@ export async function GET(request: NextRequest) {
     body:JSON.stringify({tempToken:'${tempToken}'})
   }).then(function(r){return r.json()}).then(function(d){
     if(d.success){
-      window.location.replace('${origin}/');
+      window.location.replace('${origin}${returnTo}');
     }else{
       console.error('set-session failed:',d.error);
       window.location.replace('${origin}/?error=session_failed');
@@ -225,7 +231,7 @@ export async function GET(request: NextRequest) {
   });
 })();
 </script>
-<noscript><meta http-equiv="refresh" content="0;url=${origin}/"></noscript>
+<noscript><meta http-equiv="refresh" content="0;url=${origin}${returnTo}"></noscript>
 </body></html>`
 
     return new NextResponse(html, {

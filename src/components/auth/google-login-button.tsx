@@ -7,6 +7,8 @@ export function GoogleLoginButton({ className = '' }: { className?: string }) {
     // Browser always knows the real domain - use window.location.origin
     const origin = window.location.origin
     const redirectUri = `${origin}/api/auth/google/callback`
+    // Save the current page URL so we can redirect back after login
+    const returnTo = window.location.pathname + window.location.search + window.location.hash
     
     // Fetch client_id, then build Google URL in browser
     fetch('/api/auth/google/config')
@@ -20,7 +22,7 @@ export function GoogleLoginButton({ className = '' }: { className?: string }) {
             scope: 'openid email profile',
             access_type: 'offline',
             prompt: 'consent',
-            state: origin, // Pass origin so callback can verify
+            state: origin + '|' + returnTo, // Pass origin and return URL
           })
           window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
         }
