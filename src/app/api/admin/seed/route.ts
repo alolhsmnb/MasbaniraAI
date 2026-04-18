@@ -7,6 +7,7 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   site_description: 'Professional AI-powered platform for generating stunning images and videos',
   daily_free_credits: '10',
   cost_per_generation: '1',
+  imgbb_api_key: 'b638c35d946a3d94b9484d20ab726698',
 }
 
 const DEFAULT_PLANS = [

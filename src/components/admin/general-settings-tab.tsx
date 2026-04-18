@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Save, Loader2 } from 'lucide-react'
+import { Save, Loader2, ImageIcon } from 'lucide-react'
 
 export function GeneralSettingsTab() {
   const { settings } = useAppStore()
@@ -24,6 +24,7 @@ export function GeneralSettingsTab() {
         daily_free_credits: settings.daily_free_credits || '10',
         cost_per_generation: settings.cost_per_generation || '1',
         logo_url: settings.logo_url || '',
+        imgbb_api_key: settings.imgbb_api_key || '',
       })
       setLoading(false)
     } else {
@@ -40,6 +41,7 @@ export function GeneralSettingsTab() {
                 daily_free_credits: data.data.daily_free_credits || '10',
                 cost_per_generation: data.data.cost_per_generation || '1',
                 logo_url: data.data.logo_url || '',
+                imgbb_api_key: data.data.imgbb_api_key || '',
               })
             }
           }
@@ -146,6 +148,25 @@ export function GeneralSettingsTab() {
             />
           </div>
         )}
+      </div>
+      <div className="space-y-2">
+        <Label className="flex items-center gap-2">
+          <ImageIcon className="size-4" />
+          ImgBB API Key
+        </Label>
+        <Input
+          type="password"
+          value={form.imgbb_api_key || ''}
+          onChange={(e) => setForm({ ...form, imgbb_api_key: e.target.value })}
+          placeholder="Enter your ImgBB API key..."
+        />
+        <p className="text-xs text-muted-foreground">
+          Used for uploading reference images. Images auto-delete after 10 minutes to save storage.
+          Get your key at{' '}
+          <a href="https://api.imgbb.com/" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">
+            api.imgbb.com
+          </a>
+        </p>
       </div>
       <Button
         onClick={handleSave}
