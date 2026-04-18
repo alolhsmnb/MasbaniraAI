@@ -160,12 +160,20 @@ export function GeneratePage() {
 
   // Check if current model supports/requires image input
   const isSeedanceModel = SEEDANCE_MODELS.includes(selectedModel)
-  const currentModelSupportsImage = IMAGE_INPUT_MODELS.includes(selectedModel) || IMAGE_REQUIRED_MODELS.includes(selectedModel) || isSeedanceModel
+  const currentModelSupportsImage = IMAGE_INPUT_MODELS.includes(selectedModel) || IMAGE_REQUIRED_MODELS.includes(selectedModel) || isSeedanceModel || selectedModel.startsWith('veo3')
   const currentModelRequiresImage = IMAGE_REQUIRED_MODELS.includes(selectedModel)
   const isVideoModel = VIDEO_MODELS.includes(selectedModel) || selectedModel.startsWith('veo3')
   const currentModelIsImageToVideo = selectedModel === 'grok-imagine/image-to-video'
   const isSora2Model = SORA2_MODELS.includes(selectedModel)
   const isVeoModel = selectedModel.startsWith('veo3')
+
+  // Reset aspect ratio when switching to Veo model (supports only 16:9, 9:16, Auto)
+  const handleModelChange = useCallback((modelId: string) => {
+    setSelectedModel(modelId)
+    if (modelId.startsWith('veo3')) {
+      setAspectRatio('16:9')
+    }
+  }, [])
 
   // Fetch models (re-fetch when page changes to reflect admin changes)
   const fetchModels = useCallback(async () => {
@@ -551,7 +559,7 @@ export function GeneratePage() {
                 {/* Model select */}
                 <div className="space-y-2">
                   <Label className="text-sm text-muted-foreground">AI Model</Label>
-                  <Select value={selectedModel} onValueChange={setSelectedModel}>
+                  <Select value={selectedModel} onValueChange={handleModelChange}>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select a model" />
                     </SelectTrigger>
@@ -810,7 +818,7 @@ export function GeneratePage() {
                                 </div>
                               </div>
                             </div>
-                          ) : isVideoModel ? (
+                          ) : isVideoModel && !isVeoModel ? (
                             <div className="space-y-2">
                               <Label className="text-xs text-muted-foreground">Resolution</Label>
                               <Select value={videoResolution} onValueChange={(val) => setVideoResolution(val)}>

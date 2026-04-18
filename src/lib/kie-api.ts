@@ -167,7 +167,7 @@ export async function createTask(
     input: inputObj,
   }
 
-  const baseUrl = process.env.NEXTAUTH_URL
+  const baseUrl = process.env.NEXTAUTH_URL?.replace(/[\r\n\s]+/g, '')
   if (baseUrl) {
     body.callBackUrl = `${baseUrl}/api/generate/callback`
   }
@@ -453,7 +453,7 @@ export async function createVeoTask(
     body.watermark = input.watermark
   }
 
-  const baseUrl = process.env.NEXTAUTH_URL
+  const baseUrl = process.env.NEXTAUTH_URL?.replace(/[\r\n\s]+/g, '')
   if (baseUrl) {
     body.callBackUrl = `${baseUrl}/api/generate/callback`
   }
