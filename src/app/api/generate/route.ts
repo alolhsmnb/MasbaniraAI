@@ -101,13 +101,14 @@ export async function POST(request: NextRequest) {
     // Call KIE.AI API - Veo uses a different endpoint
     let taskResult: { taskId: string; apiKeyId: string }
 
-    if (model.modelId === 'veo3_fast') {
-      // Veo 3.1 Fast - uses /api/v1/veo/generate endpoint
+    if (model.modelId.startsWith('veo3')) {
+      // Veo 3.1 (Quality / Fast / Lite) - uses /api/v1/veo/generate endpoint
       taskResult = await createVeoTask({
         prompt: prompt.trim(),
-        model: 'veo3_fast',
+        model: model.modelId,
         imageUrls: imageInput && imageInput.length > 0 ? imageInput : undefined,
         aspect_ratio: aspectRatio || '16:9',
+        resolution: imageSize || undefined,
         enableTranslation: enableTranslation !== false,
         watermark: watermark || undefined,
       })

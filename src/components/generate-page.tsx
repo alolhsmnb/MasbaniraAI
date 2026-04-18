@@ -71,17 +71,18 @@ const SORA2_ASPECT_RATIOS = ['landscape', 'portrait']
 const SORA2_FRAMES = ['10', '15']
 
 // Models that support image input (optional)
-const IMAGE_INPUT_MODELS = ['nano-banana-pro', 'nano-banana-2', 'veo3_fast']
+const IMAGE_INPUT_MODELS = ['nano-banana-pro', 'nano-banana-2', 'veo3', 'veo3_fast', 'veo3_lite']
 // Seedance models (support image input for frames/references)
 const SEEDANCE_MODELS = ['bytedance/seedance-2-fast']
 // Models that require image input
 const IMAGE_REQUIRED_MODELS = ['grok-imagine/image-to-image', 'grok-imagine/image-to-video', 'sora-2-image-to-video']
 // Video models
-const VIDEO_MODELS = ['grok-imagine/text-to-video', 'grok-imagine/image-to-video', 'sora-2-text-to-video', 'sora-2-image-to-video', 'veo3_fast', 'bytedance/seedance-2-fast']
+const VIDEO_MODELS = ['grok-imagine/text-to-video', 'grok-imagine/image-to-video', 'sora-2-text-to-video', 'sora-2-image-to-video', 'veo3', 'veo3_fast', 'veo3_lite', 'bytedance/seedance-2-fast']
 // Sora2 models (use n_frames instead of duration, portrait/landscape instead of ratios)
 const SORA2_MODELS = ['sora-2-text-to-video', 'sora-2-image-to-video']
-const VEO_MODELS = ['veo3_fast']
+const VEO_MODELS = ['veo3', 'veo3_fast', 'veo3_lite']
 const VEO_ASPECT_RATIOS = ['16:9', '9:16', 'Auto']
+const VEO_RESOLUTIONS = ['720p', '1080p']
 
 export function GeneratePage() {
   const { credits, setCredits } = useAppStore()
@@ -102,6 +103,7 @@ export function GeneratePage() {
   const [soraFrames, setSoraFrames] = useState('10')
   const [removeWatermark, setRemoveWatermark] = useState(true)
   const [enableTranslation, setEnableTranslation] = useState(true)
+  const [veoResolution, setVeoResolution] = useState('720p')
 
   // Image upload state
   const [uploadedImages, setUploadedImages] = useState<{ file: File; preview: string; url?: string }[]>([])
@@ -437,7 +439,7 @@ export function GeneratePage() {
           modelId: selectedModel,
           prompt: prompt.trim() || undefined,
           aspectRatio: isVeoModel ? (aspectRatio || '16:9') : isSora2Model ? (aspectRatio === 'portrait' || aspectRatio === 'landscape' ? aspectRatio : 'landscape') : aspectRatio,
-          imageSize: isVideoModel && !isSora2Model && !isVeoModel ? videoResolution : (imageSize === 'Auto' ? 'AUTO' : imageSize),
+          imageSize: isVeoModel ? veoResolution : (isVideoModel && !isSora2Model ? videoResolution : (imageSize === 'Auto' ? 'AUTO' : imageSize)),
           rotation: parseInt(rotation),
           type: isVideoModel ? 'VIDEO' : genType,
           imageInput: allImageUrls.length > 0 ? allImageUrls : undefined,
@@ -866,6 +868,24 @@ export function GeneratePage() {
                               </SelectContent>
                             </Select>
                           </div>
+                          {/* Veo: Resolution */}
+                          {isVeoModel && (
+                            <div className="space-y-2">
+                              <Label className="text-xs text-muted-foreground">Resolution</Label>
+                              <Select value={veoResolution} onValueChange={setVeoResolution}>
+                                <SelectTrigger className="w-full">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {VEO_RESOLUTIONS.map((res) => (
+                                    <SelectItem key={res} value={res}>
+                                      {res === '1080p' ? '🎬 1080p (HD)' : res === '720p' ? '📹 720p (SD)' : res}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
                           {/* Veo: Enable Translation */}
                           {isVeoModel && (
                             <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">

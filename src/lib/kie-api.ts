@@ -32,6 +32,7 @@ export interface VeoCreateInput {
   imageUrls?: string[]
   generationType?: string
   aspect_ratio?: string
+  resolution?: string
   enableTranslation?: boolean
   watermark?: string
 }
@@ -442,6 +443,10 @@ export async function createVeoTask(
     body.generationType = input.generationType || 'FIRST_AND_LAST_FRAMES_2_VIDEO'
   } else {
     body.generationType = 'TEXT_2_VIDEO'
+  }
+
+  if (input.resolution) {
+    body.resolution = input.resolution
   }
 
   if (input.watermark) {
