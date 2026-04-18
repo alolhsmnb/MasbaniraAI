@@ -71,10 +71,12 @@ const SORA2_FRAMES = ['10', '15']
 
 // Models that support image input (optional)
 const IMAGE_INPUT_MODELS = ['nano-banana-pro', 'nano-banana-2', 'veo3_fast']
+// Seedance models (support image input for frames/references)
+const SEEDANCE_MODELS = ['bytedance/seedance-2-fast']
 // Models that require image input
 const IMAGE_REQUIRED_MODELS = ['grok-imagine/image-to-image', 'grok-imagine/image-to-video', 'sora-2-image-to-video']
 // Video models
-const VIDEO_MODELS = ['grok-imagine/text-to-video', 'grok-imagine/image-to-video', 'sora-2-text-to-video', 'sora-2-image-to-video', 'veo3_fast']
+const VIDEO_MODELS = ['grok-imagine/text-to-video', 'grok-imagine/image-to-video', 'sora-2-text-to-video', 'sora-2-image-to-video', 'veo3_fast', 'bytedance/seedance-2-fast']
 // Sora2 models (use n_frames instead of duration, portrait/landscape instead of ratios)
 const SORA2_MODELS = ['sora-2-text-to-video', 'sora-2-image-to-video']
 const VEO_MODELS = ['veo3_fast']
@@ -154,7 +156,8 @@ export function GeneratePage() {
   }, [models, selectedModel, imageSize, videoDuration, videoResolution, soraFrames])
 
   // Check if current model supports/requires image input
-  const currentModelSupportsImage = IMAGE_INPUT_MODELS.includes(selectedModel) || IMAGE_REQUIRED_MODELS.includes(selectedModel)
+  const isSeedanceModel = SEEDANCE_MODELS.includes(selectedModel)
+  const currentModelSupportsImage = IMAGE_INPUT_MODELS.includes(selectedModel) || IMAGE_REQUIRED_MODELS.includes(selectedModel) || isSeedanceModel
   const currentModelRequiresImage = IMAGE_REQUIRED_MODELS.includes(selectedModel)
   const isVideoModel = VIDEO_MODELS.includes(selectedModel)
   const currentModelIsImageToVideo = selectedModel === 'grok-imagine/image-to-video'
