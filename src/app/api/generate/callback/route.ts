@@ -56,18 +56,47 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: 'Already processed' })
     }
 
-    // Determine status - check both state and status fields
+    // Determine status - check both state/status fields AND top-level code (Veo uses code)
     const callbackData = body.data || body
+    const callbackCode = body.code || callbackData.code
     const stateOrStatus = callbackData.state || callbackData.status || body.state || body.status || ''
 
-    // Use the same status checking logic as polling
-    const statusCheck = { state: stateOrStatus, status: stateOrStatus }
+    // Veo-style callback: uses "code" at top level (200 = success, 501 = failed, etc.)
+    const isVeoCallback = !!callbackCode && !stateOrStatus
+    let isCompleted = false
+    let isFailed = false
 
-    if (isTaskCompleted(statusCheck)) {
+    if (isVeoCallback) {
+      isCompleted = callbackCode === 200
+      isFailed = callbackCode >= 400 && callbackCode !== 200
+    } else {
+      // Standard KIE.AI callback: uses state/status fields
+      const statusCheck = { state: stateOrStatus, status: stateOrStatus }
+      isCompleted = isTaskCompleted(statusCheck)
+      isFailed = isTaskFailed(statusCheck)
+    }
+
+    if (isCompleted) {
       // Extract result URL from callback payload
       // Standard models: resultJson field
-      // Veo: data.info.resultUrls
-      const resultData = callbackData.resultJson || callbackData.result || body.resultJson || body.result || body.output || callbackData.output || callbackData.info || callbackData
+      // Veo: data.info.resultUrls (JSON string like '["url"]')
+      let resultData = callbackData.resultJson || callbackData.result || body.resultJson || body.result || body.output || callbackData.output
+
+      // Veo-specific: extract from data.info.resultUrls
+      if (callbackData.info) {
+        const info = callbackData.info
+        // resultUrls can be a JSON string: '["https://..."]' or a direct URL
+        if (info.resultUrls) {
+          resultData = info.resultUrls
+        } else if (info.originUrls) {
+          resultData = info.originUrls
+        }
+      }
+
+      // Fallback to callbackData if nothing found
+      if (!resultData) {
+        resultData = callbackData
+      }
 
       console.log(`[Callback] Task ${taskId} completed. Extracting URL from result...`)
 
@@ -114,7 +143,7 @@ export async function POST(request: NextRequest) {
           })
         }
       }
-    } else if (isTaskFailed(statusCheck)) {
+    } else if (isFailed) {
       const errorMsg = callbackData.failMsg || callbackData.error || callbackData.msg ||
         body.failMsg || body.error || body.msg || 'Generation failed'
 
