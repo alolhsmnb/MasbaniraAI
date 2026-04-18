@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -36,6 +36,8 @@ import {
   Pencil,
   Ban,
   CheckCircle2,
+  Database,
+  X,
 } from 'lucide-react'
 
 const PAGE_SIZE = 10
@@ -45,14 +47,17 @@ export function UsersTab() {
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [editUser, setEditUser] = useState<any>(null)
   const [editForm, setEditForm] = useState({ dailyCredits: '', paidCredits: '', role: 'USER' })
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fetchUsers = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) })
+      if (debouncedSearch) params.set('search', debouncedSearch)
       const res = await fetch(`/api/admin/users?${params}`)
       if (res.ok) {
         const data = await res.json()
@@ -66,19 +71,23 @@ export function UsersTab() {
     } finally {
       setLoading(false)
     }
-  }, [page])
+  }, [page, debouncedSearch])
+
+  // Debounce search input
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(1) // reset to first page on new search
+    }, 300)
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    }
+  }, [search])
 
   useEffect(() => {
     fetchUsers()
   }, [fetchUsers])
-
-  const filteredUsers = search
-    ? users.filter(
-        (u) =>
-          u.email?.toLowerCase().includes(search.toLowerCase()) ||
-          u.name?.toLowerCase().includes(search.toLowerCase())
-      )
-    : users
 
   const handleEditOpen = (user: any) => {
     setEditUser(user)
@@ -138,11 +147,29 @@ export function UsersTab() {
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
         <Input
-          placeholder="Search users..."
+          placeholder="Search by name or email..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
+          className="pl-9 pr-9"
         />
+        {search ? (
+          <button
+            onClick={() => setSearch('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X className="size-3.5" />
+          </button>
+        ) : (
+          <Database className="absolute right-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
+        )}
+        {debouncedSearch && !loading && (
+          <div className="absolute -bottom-5 left-1">
+            <Badge variant="secondary" className="text-[10px] gap-1 px-1.5 py-0">
+              <Database className="size-2.5" />
+              DB Search · {total} result{total !== 1 ? 's' : ''}
+            </Badge>
+          </div>
+        )}
       </div>
 
       {/* Table */}
@@ -171,14 +198,14 @@ export function UsersTab() {
                     ))}
                   </TableRow>
                 ))
-              ) : filteredUsers.length === 0 ? (
+              ) : users.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    No users found
+                    {search ? `No users found for "${search}"` : 'No users found'}
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredUsers.map((user) => (
+                users.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">{user.name || '—'}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{user.email}</TableCell>
