@@ -115,7 +115,9 @@ export async function GET(
 
           // Try to find any URL anywhere in the raw data
           const rawStr = JSON.stringify(resultData)
-          const urlMatch = rawStr.match(/https?:\/\/[^\s"'<>]+/)
+          // Prioritize video URLs first, then any URL
+          const videoUrlMatch = rawStr.match(/https?:\/\/[^\s"'<>\]}]+?\.(mp4|webm|mov)(\?[^\s"'<>\]}]*)?/i)
+          const urlMatch = videoUrlMatch || rawStr.match(/https?:\/\/[^\s"'<>\]}]+?\.(png|jpg|jpeg|gif|webp|bmp)(\?[^\s"'<>\]}]*)?/i) || rawStr.match(/https?:\/\/[^\s"'<>]+/)
 
           if (urlMatch) {
             console.log(`[Poll] Found URL via regex fallback: ${urlMatch[0].substring(0, 150)}`)

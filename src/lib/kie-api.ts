@@ -265,7 +265,13 @@ export async function checkTaskStatus(
     throw new Error(`KIE.AI API returned error: code=${data.code} msg=${data.msg}`)
   }
 
-  return data.data || data
+  const result = data.data || data
+  
+  // Log full task details for video models (Seedance, etc.) for debugging
+  const taskState = (result as any).state || (result as any).status || 'unknown'
+  console.log(`[KIE.AI] recordInfo task ${taskId}: state=${taskState}, hasResultJson=${!!(result as any).resultJson}, hasResult=${!!(result as any).result}`)
+  
+  return result
 }
 
 /**
@@ -323,7 +329,7 @@ export function extractResultUrl(result: unknown): string | null {
  */
 function extractFromObject(obj: Record<string, unknown>): string | null {
   // Direct URL fields (including video-specific ones)
-  for (const field of ['url', 'image_url', 'output_url', 'file_url', 'video_url', 'videoUrl', 'mp4_url', 'mp4', 'download_url', 'result', 'image', 'src', 'link']) {
+  for (const field of ['url', 'image_url', 'output_url', 'file_url', 'video_url', 'videoUrl', 'mp4_url', 'mp4', 'download_url', 'result', 'image', 'src', 'link', 'originUrl', 'origin_url', 'video', 'audio_url', 'audioUrl']) {
     const val = obj[field]
     if (typeof val === 'string' && (val.startsWith('http://') || val.startsWith('https://'))) {
       return val
@@ -339,6 +345,26 @@ function extractFromObject(obj: Record<string, unknown>): string | null {
       // Some APIs return objects with url field in resultUrls
       if (typeof item === 'object' && item !== null) {
         const url = extractFromObject(item as Record<string, unknown>)
+        if (url) return url
+      }
+    }
+  }
+
+  // originUrls array (used by some KIE.AI models)
+  if (Array.isArray(obj.originUrls)) {
+    for (const item of obj.originUrls) {
+      if (typeof item === 'string' && (item.startsWith('http://') || item.startsWith('https://'))) {
+        return item
+      }
+    }
+  }
+
+  // videos array (used by Seedance and other video models)
+  if (Array.isArray(obj.videos)) {
+    for (const v of obj.videos) {
+      if (typeof v === 'string' && (v.startsWith('http://') || v.startsWith('https://'))) return v
+      if (typeof v === 'object' && v !== null) {
+        const url = extractFromObject(v as Record<string, unknown>)
         if (url) return url
       }
     }
@@ -394,14 +420,14 @@ function extractFromObject(obj: Record<string, unknown>): string | null {
  * KIE.AI uses "state" field with value "success"
  */
 export function isTaskCompleted(data: TaskStatusResult): boolean {
-  // KIE.AI specific: "state" field with "success" value
+  // KIE.AI specific: "state" field with various values
+  // Standard models use "success", newer models (Seedance, etc.) use "succeed"
   const state = (data.state || '').toString().toLowerCase()
   const status = (data.status || '').toString().toLowerCase()
   
-  return (
-    state === 'success' || state === 'completed' || state === 'done' || state === 'finished' || state === 'succeeded' ||
-    status === 'completed' || status === 'success' || status === 'done' || status === 'finished' || status === 'succeeded'
-  )
+  const completedStates = ['success', 'succeed', 'completed', 'done', 'finished', 'succeeded', 'complete']
+  
+  return completedStates.includes(state) || completedStates.includes(status)
 }
 
 /**
@@ -411,10 +437,9 @@ export function isTaskFailed(data: TaskStatusResult): boolean {
   const state = (data.state || '').toString().toLowerCase()
   const status = (data.status || '').toString().toLowerCase()
   
-  return (
-    state === 'failed' || state === 'error' || state === 'cancelled' || state === 'aborted' ||
-    status === 'failed' || status === 'error' || status === 'cancelled' || status === 'aborted'
-  )
+  const failedStates = ['failed', 'failure', 'error', 'cancelled', 'canceled', 'aborted', 'abort', 'timeout', 'timedout']
+  
+  return failedStates.includes(state) || failedStates.includes(status)
 }
 
 /**
