@@ -458,11 +458,14 @@ export async function createVeoTask(
     body.callBackUrl = `${baseUrl}/api/generate/callback`
   }
 
+  // Log the full request body for debugging
+  console.log(`[KIE.AI] Veo request body:`, JSON.stringify(body))
+
   // Try each key with automatic failover
   let lastError: string = ''
   for (const apiKey of allKeys) {
     try {
-      console.log(`[KIE.AI] Veo trying key: ${apiKey.name || apiKey.id.substring(0, 8)}...`)
+      console.log(`[KIE.AI] Veo trying key: ${apiKey.name || apiKey.id.substring(0, 8)}... model=${input.model}`)
 
       const response = await fetch(`${KIE_BASE_URL}/veo/generate`, {
         method: 'POST',
@@ -474,6 +477,7 @@ export async function createVeoTask(
       })
 
       const data = await response.json()
+      console.log(`[KIE.AI] Veo response:`, JSON.stringify(data))
 
       if (data.code === 200 && data.data?.taskId) {
         console.log(`[KIE.AI] ✓ Veo task created with key: ${apiKey.name || apiKey.id.substring(0, 8)}...`)
@@ -493,6 +497,9 @@ export async function createVeoTask(
       }
 
       lastError = `code=${data.code} msg=${data.msg || ''}`
+
+      // Log full Veo error for debugging
+      console.error(`[KIE.AI] Veo API error:`, JSON.stringify(data))
 
       if (isRetryableError(lastError)) {
         console.warn(`[KIE.AI] ⚠ Key ${apiKey.name || apiKey.id.substring(0, 8)}... failed: ${lastError}. Trying next key...`)

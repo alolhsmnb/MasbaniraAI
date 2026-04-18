@@ -162,10 +162,10 @@ export function GeneratePage() {
   const isSeedanceModel = SEEDANCE_MODELS.includes(selectedModel)
   const currentModelSupportsImage = IMAGE_INPUT_MODELS.includes(selectedModel) || IMAGE_REQUIRED_MODELS.includes(selectedModel) || isSeedanceModel
   const currentModelRequiresImage = IMAGE_REQUIRED_MODELS.includes(selectedModel)
-  const isVideoModel = VIDEO_MODELS.includes(selectedModel)
+  const isVideoModel = VIDEO_MODELS.includes(selectedModel) || selectedModel.startsWith('veo3')
   const currentModelIsImageToVideo = selectedModel === 'grok-imagine/image-to-video'
   const isSora2Model = SORA2_MODELS.includes(selectedModel)
-  const isVeoModel = VEO_MODELS.includes(selectedModel)
+  const isVeoModel = selectedModel.startsWith('veo3')
 
   // Fetch models (re-fetch when page changes to reflect admin changes)
   const fetchModels = useCallback(async () => {

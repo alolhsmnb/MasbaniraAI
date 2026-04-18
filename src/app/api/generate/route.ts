@@ -103,6 +103,7 @@ export async function POST(request: NextRequest) {
 
     if (model.modelId.startsWith('veo3')) {
       // Veo 3.1 (Quality / Fast / Lite) - uses /api/v1/veo/generate endpoint
+      console.log(`[Generate] Veo model detected: ${model.modelId}, imageSize=${imageSize}, aspectRatio=${aspectRatio}, enableTranslation=${enableTranslation}`)
       taskResult = await createVeoTask({
         prompt: prompt.trim(),
         model: model.modelId,
