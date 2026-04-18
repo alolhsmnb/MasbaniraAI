@@ -446,7 +446,7 @@ export function VodafoneCashAdminTab() {
 
           {/* Credits per EGP */}
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Credits per 1 EGP</Label>
+            <Label className="text-xs text-muted-foreground">Cost per Credit (EGP)</Label>
             <Input
               type="number"
               value={creditsPerEgp}

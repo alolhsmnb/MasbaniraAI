@@ -204,8 +204,8 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Calculate credits
-    const creditsToAdd = Math.max(1, Math.round(amount * creditsPerEgp))
+    // Calculate credits: amount EGP ÷ cost per credit = total credits
+    const creditsToAdd = Math.max(1, Math.round(amount / creditsPerEgp))
     console.log(`[VodafoneCash] 💰 Adding ${creditsToAdd} credits to ${user.email} (${normalizedNumber})`)
 
     // Update user credits and transaction in a single transaction

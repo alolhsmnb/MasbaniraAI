@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
       const creditsPerEgpSetting = await db.siteSetting.findUnique({ where: { key: 'vodafone_credits_per_egp' } })
       const creditsPerEgp = parseFloat(creditsPerEgpSetting?.value || '1')
 
-      const creditsToAdd = targetCredits || Math.max(1, Math.round(parseFloat(amount) * creditsPerEgp))
+      const creditsToAdd = targetCredits || Math.max(1, Math.round(parseFloat(amount) / creditsPerEgp))
 
       // If targetUserId is provided, directly complete the transaction
       if (targetUserId) {
