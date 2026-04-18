@@ -518,12 +518,74 @@ export async function createVeoTask(
 }
 
 /**
- * Check Veo task status using recordInfo endpoint
+ * Check Veo task status using the Veo-specific videoDetails endpoint
+ * (recordInfo does NOT work for Veo tasks)
  */
 export async function checkVeoTaskStatus(
   taskId: string,
   apiKey: string
 ): Promise<TaskStatusResult> {
-  // Veo uses the same recordInfo endpoint for polling
-  return checkTaskStatus(taskId, apiKey)
+  const response = await fetch(
+    `${KIE_BASE_URL}/veo/videoDetails?taskId=${encodeURIComponent(taskId)}`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    }
+  )
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`KIE.AI Veo API error (${response.status}): ${errorText}`)
+  }
+
+  const data = await response.json()
+
+  // Log raw response for debugging
+  console.log(`[KIE.AI] Veo videoDetails response for ${taskId}:`, JSON.stringify(data).substring(0, 2000))
+
+  if (data.code !== 200) {
+    throw new Error(`KIE.AI Veo API returned error: code=${data.code} msg=${data.msg}`)
+  }
+
+  const result = data.data || data
+
+  // Veo response format:
+  // { code: 200, data: { taskId, status, info: { resultUrls, resolution } } }
+  // status: "pending" | "processing" | "completed" | "failed"
+  const veoStatus = (result as any).status || ''
+
+  // Map Veo status to standard TaskStatusResult format
+  if (veoStatus === 'completed' || veoStatus === 'success') {
+    const info = (result as any).info || {}
+    const resultUrls = info.resultUrls
+    // resultUrls can be a JSON string like '["url1","url2"]' or a string like '["url"]'
+    let urlData = resultUrls
+    if (typeof urlData === 'string') {
+      try { urlData = JSON.parse(urlData) } catch { /* keep as string */ }
+    }
+
+    return {
+      state: 'SUCCEED',
+      status: 'completed',
+      resultJson: typeof urlData === 'string' ? urlData : JSON.stringify(urlData),
+      result: urlData,
+    }
+  } else if (veoStatus === 'failed') {
+    return {
+      state: 'FAILED',
+      status: 'failed',
+      resultJson: JSON.stringify({ code: 501, msg: 'Veo generation failed' }),
+      result: null,
+    }
+  } else {
+    // Still processing (pending, processing, etc.)
+    return {
+      state: 'RUNNING',
+      status: veoStatus || 'processing',
+      resultJson: null,
+      result: null,
+    }
+  }
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, AuthError } from '@/lib/auth'
-import { checkTaskStatus, extractResultUrl, isTaskCompleted, isTaskFailed, getAllActiveApiKeys } from '@/lib/kie-api'
+import { checkTaskStatus, checkVeoTaskStatus, extractResultUrl, isTaskCompleted, isTaskFailed, getAllActiveApiKeys } from '@/lib/kie-api'
 
 export async function GET(
   request: NextRequest,
@@ -59,12 +59,16 @@ export async function GET(
       // Get all active keys for fallback (longer videos may need retry with different keys)
       const allKeys = await getAllActiveApiKeys()
 
+      // Determine if this is a Veo task (different endpoint)
+      const isVeoTask = generation.model?.modelId?.startsWith('veo3')
+      const checkStatus = isVeoTask ? checkVeoTaskStatus : checkTaskStatus
+
       let taskStatus: Awaited<ReturnType<typeof checkTaskStatus>> | null = null
 
       // Try each key until one works
       for (const apiKey of allKeys) {
         try {
-          taskStatus = await checkTaskStatus(taskId, apiKey.key)
+          taskStatus = await checkStatus(taskId, apiKey.key)
           break
         } catch (keyError) {
           console.warn(`[Poll] Key ${apiKey.name || apiKey.id.substring(0, 8)}... failed for status check, trying next...`)

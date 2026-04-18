@@ -834,7 +834,7 @@ export function GeneratePage() {
                                 </SelectContent>
                               </Select>
                             </div>
-                          ) : (
+                          ) : isVeoModel ? null : (
                             <div className="space-y-2">
                               <Label className="text-xs text-muted-foreground">Resolution</Label>
                               <Select value={imageSize} onValueChange={setImageSize}>
