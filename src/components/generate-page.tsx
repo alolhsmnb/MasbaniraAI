@@ -69,6 +69,9 @@ const OUTPUT_FORMATS = ['png', 'jpg']
 const VIDEO_MODES = ['fun', 'normal', 'spicy']
 const SORA2_ASPECT_RATIOS = ['landscape', 'portrait']
 const SORA2_FRAMES = ['10', '15']
+// Seedance 2.0 Fast
+const SEEDANCE_ASPECT_RATIOS = ['16:9', '1:1', '4:3', '3:4', '9:16', '21:9', 'adaptive']
+const SEEDANCE_RESOLUTIONS = ['480p', '720p']
 
 // Models that support image input (optional)
 const IMAGE_INPUT_MODELS = ['nano-banana-pro', 'nano-banana-2', 'veo3', 'veo3_fast', 'veo3_lite']
@@ -104,6 +107,16 @@ export function GeneratePage() {
   const [removeWatermark, setRemoveWatermark] = useState(true)
   const [enableTranslation, setEnableTranslation] = useState(true)
   const [veoResolution, setVeoResolution] = useState('720p')
+
+  // Seedance state
+  const [seedanceDuration, setSeedanceDuration] = useState(5)
+  const [seedanceResolution, setSeedanceResolution] = useState('720p')
+  const [seedanceGenerateAudio, setSeedanceGenerateAudio] = useState(false)
+  const [seedanceWebSearch, setSeedanceWebSearch] = useState(false)
+  const [seedanceRefVideoUrls, setSeedanceRefVideoUrls] = useState<string[]>([])
+  const [seedanceRefAudioUrls, setSeedanceRefAudioUrls] = useState<string[]>([])
+  const [seedanceRefVideoInput, setSeedanceRefVideoInput] = useState('')
+  const [seedanceRefAudioInput, setSeedanceRefAudioInput] = useState('')
 
   // Image upload state
   const [uploadedImages, setUploadedImages] = useState<{ file: File; preview: string; url?: string }[]>([])
@@ -167,10 +180,13 @@ export function GeneratePage() {
   const isSora2Model = SORA2_MODELS.includes(selectedModel)
   const isVeoModel = selectedModel.startsWith('veo3')
 
-  // Reset aspect ratio when switching to Veo model (supports only 16:9, 9:16, Auto)
+  // Reset aspect ratio when switching to Veo/Seedance model
   const handleModelChange = useCallback((modelId: string) => {
     setSelectedModel(modelId)
     if (modelId.startsWith('veo3')) {
+      setAspectRatio('16:9')
+    }
+    if (modelId === 'bytedance/seedance-2-fast') {
       setAspectRatio('16:9')
     }
   }, [])
@@ -440,23 +456,37 @@ export function GeneratePage() {
     ]
 
     try {
+      // Build Seedance-specific payload
+      const seedancePayload = isSeedanceModel ? {
+        seedanceFirstFrameUrl: allImageUrls.length >= 1 ? allImageUrls[0] : undefined,
+        seedanceLastFrameUrl: allImageUrls.length >= 2 ? allImageUrls[1] : undefined,
+        seedanceReferenceImageUrls: allImageUrls.length >= 3 ? allImageUrls.slice(2) : undefined,
+        seedanceReferenceVideoUrls: seedanceRefVideoUrls.length > 0 ? seedanceRefVideoUrls : undefined,
+        seedanceReferenceAudioUrls: seedanceRefAudioUrls.length > 0 ? seedanceRefAudioUrls : undefined,
+        seedanceDuration,
+        seedanceResolution,
+        seedanceGenerateAudio,
+        seedanceWebSearch,
+      } : {}
+
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           modelId: selectedModel,
           prompt: prompt.trim() || undefined,
-          aspectRatio: isVeoModel ? (aspectRatio || '16:9') : isSora2Model ? (aspectRatio === 'portrait' || aspectRatio === 'landscape' ? aspectRatio : 'landscape') : aspectRatio,
-          imageSize: isVeoModel ? veoResolution : (isVideoModel && !isSora2Model ? videoResolution : (imageSize === 'Auto' ? 'AUTO' : imageSize)),
+          aspectRatio: isVeoModel ? (aspectRatio || '16:9') : isSora2Model ? (aspectRatio === 'portrait' || aspectRatio === 'landscape' ? aspectRatio : 'landscape') : isSeedanceModel ? (aspectRatio || '16:9') : aspectRatio,
+          imageSize: isVeoModel ? veoResolution : (isSeedanceModel ? seedanceResolution : (isVideoModel && !isSora2Model ? videoResolution : (imageSize === 'Auto' ? 'AUTO' : imageSize))),
           rotation: parseInt(rotation),
           type: isVideoModel ? 'VIDEO' : genType,
           imageInput: allImageUrls.length > 0 ? allImageUrls : undefined,
           outputFormat: !isVideoModel && currentModelSupportsImage ? outputFormat : undefined,
-          mode: isVideoModel && !isSora2Model && !isVeoModel ? videoMode : undefined,
-          duration: isVideoModel && !isSora2Model && !isVeoModel ? videoDuration : undefined,
+          mode: isVideoModel && !isSora2Model && !isVeoModel && !isSeedanceModel ? videoMode : undefined,
+          duration: isSeedanceModel ? seedanceDuration : (isVideoModel && !isSora2Model && !isVeoModel ? videoDuration : undefined),
           nFrames: isSora2Model ? soraFrames : undefined,
           removeWatermark: isSora2Model ? removeWatermark : undefined,
           enableTranslation: isVeoModel ? enableTranslation : undefined,
+          ...seedancePayload,
         }),
       })
 
@@ -596,17 +626,22 @@ export function GeneratePage() {
                 {/* Image Upload Section - only for models that support it */}
                 {currentModelSupportsImage && (
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-1">
                       <Label className="text-sm text-muted-foreground flex items-center gap-1.5">
                         <ImagePlus className="size-3.5" />
-                        Reference Images
+                        {isSeedanceModel ? 'Frame & Reference Images' : 'Reference Images'}
                         <Badge variant={currentModelRequiresImage ? "destructive" : "outline"} className="text-[10px] px-1.5 py-0">
                           {currentModelRequiresImage ? 'Required' : 'Optional'}
                         </Badge>
                       </Label>
-                      <span className="text-xs text-muted-foreground">
-                        {uploadedImages.length + imageUrls.length}/8
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {isSeedanceModel && (
+                          <span className="text-[10px] text-muted-foreground/70">1st→First Frame · 2nd→Last Frame · 3+→Refs</span>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {uploadedImages.length + imageUrls.length}/8
+                        </span>
+                      </div>
                     </div>
 
                     {/* Upload area */}
@@ -802,20 +837,222 @@ export function GeneratePage() {
                               </button>
                             </div>
                           )}
-                          {/* Seedance: Fixed Resolution & Duration info */}
+                          {/* Seedance: Full settings */}
                           {isSeedanceModel ? (
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-3">
+                              {/* Duration slider */}
                               <div className="space-y-2">
-                                <Label className="text-xs text-muted-foreground">Resolution</Label>
-                                <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-muted-foreground">
-                                  480p · Fixed
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-xs text-muted-foreground">Duration</Label>
+                                  <span className="text-xs font-medium text-emerald-400">{seedanceDuration}s</span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min={4}
+                                  max={15}
+                                  step={1}
+                                  value={seedanceDuration}
+                                  onChange={(e) => setSeedanceDuration(parseInt(e.target.value))}
+                                  className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-emerald-500"
+                                />
+                                <div className="flex justify-between text-[10px] text-muted-foreground">
+                                  <span>4s</span>
+                                  <span>15s</span>
                                 </div>
                               </div>
+
+                              {/* Resolution */}
                               <div className="space-y-2">
-                                <Label className="text-xs text-muted-foreground">Duration</Label>
-                                <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-muted-foreground">
-                                  5s · Fixed
+                                <Label className="text-xs text-muted-foreground">Resolution</Label>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {SEEDANCE_RESOLUTIONS.map((res) => (
+                                    <button
+                                      key={res}
+                                      onClick={() => setSeedanceResolution(res)}
+                                      className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                        seedanceResolution === res
+                                          ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/20'
+                                          : 'bg-white/5 border border-white/10 text-muted-foreground hover:border-emerald-500/30 hover:text-foreground'
+                                      }`}
+                                    >
+                                      {res === '720p' ? '🎬 720p HD' : '📹 480p Fast'}
+                                    </button>
+                                  ))}
                                 </div>
+                              </div>
+
+                              {/* Generate Audio toggle */}
+                              <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
+                                <div>
+                                  <span className="text-xs text-muted-foreground">Generate Audio</span>
+                                  <p className="text-[10px] text-muted-foreground/60">Adds AI-generated sound (costs more)</p>
+                                </div>
+                                <button
+                                  onClick={() => setSeedanceGenerateAudio(!seedanceGenerateAudio)}
+                                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                                    seedanceGenerateAudio ? 'bg-emerald-500' : 'bg-white/20'
+                                  }`}
+                                >
+                                  <span
+                                    className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
+                                      seedanceGenerateAudio ? 'translate-x-4' : 'translate-x-0.5'
+                                    }`}
+                                  />
+                                </button>
+                              </div>
+
+                              {/* Web Search toggle */}
+                              <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
+                                <div>
+                                  <span className="text-xs text-muted-foreground">Web Search</span>
+                                  <p className="text-[10px] text-muted-foreground/60">Use online search for reference</p>
+                                </div>
+                                <button
+                                  onClick={() => setSeedanceWebSearch(!seedanceWebSearch)}
+                                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                                    seedanceWebSearch ? 'bg-emerald-500' : 'bg-white/20'
+                                  }`}
+                                >
+                                  <span
+                                    className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
+                                      seedanceWebSearch ? 'translate-x-4' : 'translate-x-0.5'
+                                    }`}
+                                  />
+                                </button>
+                              </div>
+
+                              {/* Reference Video URLs */}
+                              <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                  🎬 Reference Videos
+                                  <span className="text-[10px] text-muted-foreground/60">(URL · max 3)</span>
+                                </Label>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="url"
+                                    placeholder="https://example.com/video.mp4"
+                                    value={seedanceRefVideoInput}
+                                    onChange={(e) => setSeedanceRefVideoInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && seedanceRefVideoInput.trim()) {
+                                        if (seedanceRefVideoUrls.length >= 3) {
+                                          toast.error('Maximum 3 reference videos')
+                                          return
+                                        }
+                                        try {
+                                          new URL(seedanceRefVideoInput.trim())
+                                          setSeedanceRefVideoUrls(prev => [...prev, seedanceRefVideoInput.trim()])
+                                          setSeedanceRefVideoInput('')
+                                        } catch {
+                                          toast.error('Please enter a valid URL')
+                                        }
+                                      }
+                                    }}
+                                    className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-emerald-500/30"
+                                    dir="ltr"
+                                  />
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      if (!seedanceRefVideoInput.trim()) return
+                                      if (seedanceRefVideoUrls.length >= 3) {
+                                        toast.error('Maximum 3 reference videos')
+                                        return
+                                      }
+                                      try {
+                                        new URL(seedanceRefVideoInput.trim())
+                                        setSeedanceRefVideoUrls(prev => [...prev, seedanceRefVideoInput.trim()])
+                                        setSeedanceRefVideoInput('')
+                                      } catch {
+                                        toast.error('Please enter a valid URL')
+                                      }
+                                    }}
+                                    disabled={!seedanceRefVideoInput.trim()}
+                                    className="shrink-0"
+                                  >
+                                    Add
+                                  </Button>
+                                </div>
+                                {seedanceRefVideoUrls.length > 0 && (
+                                  <div className="space-y-1">
+                                    {seedanceRefVideoUrls.map((url, i) => (
+                                      <div key={i} className="flex items-center gap-2 text-xs bg-white/5 rounded-lg px-2 py-1.5">
+                                        <span className="truncate flex-1 text-muted-foreground font-mono" dir="ltr">{url}</span>
+                                        <button onClick={() => setSeedanceRefVideoUrls(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-300 shrink-0">
+                                          <X className="size-3" />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Reference Audio URLs */}
+                              <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                  🔊 Reference Audio
+                                  <span className="text-[10px] text-muted-foreground/60">(URL · max 3)</span>
+                                </Label>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="url"
+                                    placeholder="https://example.com/audio.mp3"
+                                    value={seedanceRefAudioInput}
+                                    onChange={(e) => setSeedanceRefAudioInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && seedanceRefAudioInput.trim()) {
+                                        if (seedanceRefAudioUrls.length >= 3) {
+                                          toast.error('Maximum 3 reference audios')
+                                          return
+                                        }
+                                        try {
+                                          new URL(seedanceRefAudioInput.trim())
+                                          setSeedanceRefAudioUrls(prev => [...prev, seedanceRefAudioInput.trim()])
+                                          setSeedanceRefAudioInput('')
+                                        } catch {
+                                          toast.error('Please enter a valid URL')
+                                        }
+                                      }
+                                    }}
+                                    className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-emerald-500/30"
+                                    dir="ltr"
+                                  />
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      if (!seedanceRefAudioInput.trim()) return
+                                      if (seedanceRefAudioUrls.length >= 3) {
+                                        toast.error('Maximum 3 reference audios')
+                                        return
+                                      }
+                                      try {
+                                        new URL(seedanceRefAudioInput.trim())
+                                        setSeedanceRefAudioUrls(prev => [...prev, seedanceRefAudioInput.trim()])
+                                        setSeedanceRefAudioInput('')
+                                      } catch {
+                                        toast.error('Please enter a valid URL')
+                                      }
+                                    }}
+                                    disabled={!seedanceRefAudioInput.trim()}
+                                    className="shrink-0"
+                                  >
+                                    Add
+                                  </Button>
+                                </div>
+                                {seedanceRefAudioUrls.length > 0 && (
+                                  <div className="space-y-1">
+                                    {seedanceRefAudioUrls.map((url, i) => (
+                                      <div key={i} className="flex items-center gap-2 text-xs bg-white/5 rounded-lg px-2 py-1.5">
+                                        <span className="truncate flex-1 text-muted-foreground font-mono" dir="ltr">{url}</span>
+                                        <button onClick={() => setSeedanceRefAudioUrls(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-300 shrink-0">
+                                          <X className="size-3" />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           ) : isVideoModel && !isVeoModel ? (
@@ -857,6 +1094,7 @@ export function GeneratePage() {
                               value={
                                 isVeoModel ? (aspectRatio || '16:9') :
                                 isSora2Model ? (aspectRatio === 'portrait' || aspectRatio === 'landscape' ? aspectRatio : 'landscape') :
+                                isSeedanceModel ? (aspectRatio || '16:9') :
                                 aspectRatio
                               }
                               onValueChange={(val) => setAspectRatio(val)}
@@ -867,10 +1105,10 @@ export function GeneratePage() {
                               <SelectContent>
                                 {(isVeoModel
                                   ? VEO_ASPECT_RATIOS
-                                  : isSora2Model ? SORA2_ASPECT_RATIOS : ASPECT_RATIOS
+                                  : isSora2Model ? SORA2_ASPECT_RATIOS : isSeedanceModel ? SEEDANCE_ASPECT_RATIOS : ASPECT_RATIOS
                                 ).map((ratio) => (
                                   <SelectItem key={ratio} value={ratio}>
-                                    {ratio === 'portrait' ? '📱 Portrait' : ratio === 'landscape' ? '🖥️ Landscape' : ratio === 'Auto' ? '🔄 Auto' : ratio}
+                                    {ratio === 'portrait' ? '📱 Portrait' : ratio === 'landscape' ? '🖥️ Landscape' : ratio === 'Auto' ? '🔄 Auto' : ratio === 'adaptive' ? '🔄 Adaptive' : ratio}
                                   </SelectItem>
                                 ))}
                               </SelectContent>

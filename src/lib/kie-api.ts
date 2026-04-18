@@ -24,6 +24,8 @@ export interface CreateTaskInput {
   first_frame_url?: string
   last_frame_url?: string
   reference_image_urls?: string[]
+  reference_video_urls?: string[]
+  reference_audio_urls?: string[]
 }
 
 export interface VeoCreateInput {
@@ -160,6 +162,12 @@ export async function createTask(
   }
   if (input.reference_image_urls && input.reference_image_urls.length > 0) {
     inputObj.reference_image_urls = input.reference_image_urls
+  }
+  if (input.reference_video_urls && input.reference_video_urls.length > 0) {
+    inputObj.reference_video_urls = input.reference_video_urls
+  }
+  if (input.reference_audio_urls && input.reference_audio_urls.length > 0) {
+    inputObj.reference_audio_urls = input.reference_audio_urls
   }
 
   const body: Record<string, unknown> = {

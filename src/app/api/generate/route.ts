@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json()
-    const { modelId, prompt, aspectRatio, imageSize, rotation, type, imageInput, outputFormat, mode, duration, nFrames, removeWatermark, enableTranslation, watermark } = body || {}
+    const { modelId, prompt, aspectRatio, imageSize, rotation, type, imageInput, outputFormat, mode, duration, nFrames, removeWatermark, enableTranslation, watermark, seedanceFirstFrameUrl, seedanceLastFrameUrl, seedanceReferenceImageUrls, seedanceReferenceVideoUrls, seedanceReferenceAudioUrls, seedanceResolution, seedanceGenerateAudio, seedanceWebSearch } = body || {}
 
     if (!modelId) {
       return NextResponse.json(
@@ -114,26 +114,55 @@ export async function POST(request: NextRequest) {
         watermark: watermark || undefined,
       })
     } else if (model.modelId === 'bytedance/seedance-2-fast') {
-      // Seedance 2 Fast - specific input format
+      // Seedance 2 Fast - full feature support per API docs
       const taskInput: Parameters<typeof createTask>[1] = {
         prompt: prompt.trim(),
-        web_search: false,
-        generate_audio: true,
-        resolution: '480p',
-        duration: 5,
+        web_search: seedanceWebSearch === true,
+        generate_audio: seedanceGenerateAudio === true,
+        resolution: seedanceResolution || '720p',
+        duration: duration || 5,
       }
 
-      if (aspectRatio && aspectRatio !== 'auto') {
+      // Aspect ratio (Seedance supports: 1:1, 4:3, 3:4, 16:9, 9:16, 21:9, adaptive)
+      if (aspectRatio) {
         taskInput.aspect_ratio = aspectRatio
       }
 
-      // Seedance uses first_frame_url for single image, reference_image_urls for multiple
-      if (imageInput && Array.isArray(imageInput) && imageInput.length > 0) {
+      // Frame URLs (from frontend image assignment)
+ if (seedanceFirstFrameUrl) {
+        taskInput.first_frame_url = seedanceFirstFrameUrl
+      }
+      if (seedanceLastFrameUrl) {
+        taskInput.last_frame_url = seedanceLastFrameUrl
+      }
+
+      // Reference image URLs (3rd+ images)
+      if (seedanceReferenceImageUrls && Array.isArray(seedanceReferenceImageUrls) && seedanceReferenceImageUrls.length > 0) {
+        taskInput.reference_image_urls = seedanceReferenceImageUrls
+      }
+
+      // Fallback: if old-style imageInput is provided without explicit frame URLs
+      if (!seedanceFirstFrameUrl && imageInput && Array.isArray(imageInput) && imageInput.length > 0) {
         if (imageInput.length === 1) {
           taskInput.first_frame_url = imageInput[0]
+        } else if (imageInput.length === 2) {
+          taskInput.first_frame_url = imageInput[0]
+          taskInput.last_frame_url = imageInput[1]
         } else {
-          taskInput.reference_image_urls = imageInput
+          taskInput.first_frame_url = imageInput[0]
+          taskInput.last_frame_url = imageInput[1]
+          taskInput.reference_image_urls = imageInput.slice(2)
         }
+      }
+
+      // Reference video URLs (max 3)
+      if (seedanceReferenceVideoUrls && Array.isArray(seedanceReferenceVideoUrls) && seedanceReferenceVideoUrls.length > 0) {
+        taskInput.reference_video_urls = seedanceReferenceVideoUrls.slice(0, 3)
+      }
+
+      // Reference audio URLs (max 3)
+      if (seedanceReferenceAudioUrls && Array.isArray(seedanceReferenceAudioUrls) && seedanceReferenceAudioUrls.length > 0) {
+        taskInput.reference_audio_urls = seedanceReferenceAudioUrls.slice(0, 3)
       }
 
       taskResult = await createTask(model.modelId, taskInput)
