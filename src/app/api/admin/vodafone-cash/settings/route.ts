@@ -38,25 +38,30 @@ export async function GET(request: NextRequest) {
       settingsMap[s.key] = s.value
     })
 
-    // Get transaction stats
-    const totalTx = await db.vodafoneCashTransaction.count()
-    const completedTx = await db.vodafoneCashTransaction.count({
-      where: { status: 'COMPLETED' },
-    })
-    const pendingTx = await db.vodafoneCashTransaction.count({
-      where: { status: 'RECEIVED' },
-    })
-    const totalCreditsAdded = await db.vodafoneCashTransaction.aggregate({
-      where: { status: 'COMPLETED' },
-      _sum: { creditsAdded: true },
-    })
-    const totalAmountEGP = await db.vodafoneCashTransaction.aggregate({
-      where: { status: 'COMPLETED' },
-      _sum: { amountEGP: true },
-    })
-    const registeredUsers = await db.user.count({
-      where: { vodafoneCashNumber: { not: null } },
-    })
+    // Get transaction stats + registered users in parallel (6 queries combined)
+    const [
+      totalTx,
+      completedTx,
+      pendingTx,
+      totalCreditsAdded,
+      totalAmountEGP,
+      registeredUsers,
+    ] = await Promise.all([
+      db.vodafoneCashTransaction.count(),
+      db.vodafoneCashTransaction.count({ where: { status: 'COMPLETED' } }),
+      db.vodafoneCashTransaction.count({ where: { status: 'RECEIVED' } }),
+      db.vodafoneCashTransaction.aggregate({
+        where: { status: 'COMPLETED' },
+        _sum: { creditsAdded: true },
+      }),
+      db.vodafoneCashTransaction.aggregate({
+        where: { status: 'COMPLETED' },
+        _sum: { amountEGP: true },
+      }),
+      db.user.count({
+        where: { vodafoneCashNumber: { not: null } },
+      }),
+    ])
 
     return NextResponse.json({
       success: true,
