@@ -118,6 +118,14 @@ export function GeneratePage() {
   const [seedanceRefVideoInput, setSeedanceRefVideoInput] = useState('')
   const [seedanceRefAudioInput, setSeedanceRefAudioInput] = useState('')
 
+  // Seedance frame upload state (separate from general image upload)
+  const [seedanceFirstFrame, setSeedanceFirstFrame] = useState<{ file: File; preview: string; url?: string } | null>(null)
+  const [seedanceLastFrame, setSeedanceLastFrame] = useState<{ file: File; preview: string; url?: string } | null>(null)
+  const [seedanceFirstFrameUploading, setSeedanceFirstFrameUploading] = useState(false)
+  const [seedanceLastFrameUploading, setSeedanceLastFrameUploading] = useState(false)
+  const seedanceFirstFrameRef = useRef<HTMLInputElement>(null)
+  const seedanceLastFrameRef = useRef<HTMLInputElement>(null)
+
   // Image upload state
   const [uploadedImages, setUploadedImages] = useState<{ file: File; preview: string; url?: string }[]>([])
   const [imageUrls, setImageUrls] = useState<string[]>([])
@@ -241,6 +249,54 @@ export function GeneratePage() {
     }
     fetchRecent()
   }, [])
+
+  // Upload single frame for Seedance (first or last)
+  const handleFrameUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    type: 'first' | 'last'
+  ) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const setUploading = type === 'first' ? setSeedanceFirstFrameUploading : setSeedanceLastFrameUploading
+    const setFrame = type === 'first' ? setSeedanceFirstFrame : setSeedanceLastFrame
+
+    setUploading(true)
+    try {
+      // Compress if large
+      let uploadFile = file
+      if (file.size > 3.5 * 1024 * 1024) {
+        uploadFile = await compressImage(file, 3.5, 4096)
+      }
+
+      const formData = new FormData()
+      formData.append('images', uploadFile)
+
+      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      if (!res.ok) {
+        toast.error(`Upload failed (${res.status})`)
+        return
+      }
+
+      const data = await res.json()
+      if (data.success && data.data?.urls?.[0]) {
+        setFrame({
+          file: uploadFile,
+          preview: URL.createObjectURL(uploadFile),
+          url: data.data.urls[0],
+        })
+        toast.success(`${type === 'first' ? 'First Frame' : 'Last Frame'} uploaded`)
+      } else {
+        toast.error(data.error || 'Upload failed')
+      }
+    } catch {
+      toast.error('Failed to upload frame')
+    } finally {
+      setUploading(false)
+      if (type === 'first' && seedanceFirstFrameRef.current) seedanceFirstFrameRef.current.value = ''
+      if (type === 'last' && seedanceLastFrameRef.current) seedanceLastFrameRef.current.value = ''
+    }
+  }
 
   // Upload images handler
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -458,9 +514,9 @@ export function GeneratePage() {
     try {
       // Build Seedance-specific payload
       const seedancePayload = isSeedanceModel ? {
-        seedanceFirstFrameUrl: allImageUrls.length >= 1 ? allImageUrls[0] : undefined,
-        seedanceLastFrameUrl: allImageUrls.length >= 2 ? allImageUrls[1] : undefined,
-        seedanceReferenceImageUrls: allImageUrls.length >= 3 ? allImageUrls.slice(2) : undefined,
+        seedanceFirstFrameUrl: seedanceFirstFrame?.url || (allImageUrls.length >= 1 ? allImageUrls[0] : undefined),
+        seedanceLastFrameUrl: seedanceLastFrame?.url || (allImageUrls.length >= 2 ? allImageUrls[1] : undefined),
+        seedanceReferenceImageUrls: allImageUrls.length >= 3 ? allImageUrls.slice(2) : (allImageUrls.length > 0 && !seedanceFirstFrame?.url && !seedanceLastFrame?.url ? allImageUrls : undefined),
         seedanceReferenceVideoUrls: seedanceRefVideoUrls.length > 0 ? seedanceRefVideoUrls : undefined,
         seedanceReferenceAudioUrls: seedanceRefAudioUrls.length > 0 ? seedanceRefAudioUrls : undefined,
         seedanceDuration,
@@ -623,105 +679,238 @@ export function GeneratePage() {
                   </div>
                 </div>
 
-                {/* Image Upload Section - only for models that support it */}
+                {/* Image Upload Section */}
                 {currentModelSupportsImage && (
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between flex-wrap gap-1">
-                      <Label className="text-sm text-muted-foreground flex items-center gap-1.5">
-                        <ImagePlus className="size-3.5" />
-                        {isSeedanceModel ? 'Frame & Reference Images' : 'Reference Images'}
-                        <Badge variant={currentModelRequiresImage ? "destructive" : "outline"} className="text-[10px] px-1.5 py-0">
-                          {currentModelRequiresImage ? 'Required' : 'Optional'}
-                        </Badge>
-                      </Label>
-                      <div className="flex items-center gap-2">
-                        {isSeedanceModel && (
-                          <span className="text-[10px] text-muted-foreground/70">1st→First Frame · 2nd→Last Frame · 3+→Refs</span>
-                        )}
-                        <span className="text-xs text-muted-foreground">
-                          {uploadedImages.length + imageUrls.length}/8
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Upload area */}
-                    <div
-                      onClick={() => fileInputRef.current?.click()}
-                      className="border-2 border-dashed border-white/10 rounded-xl p-4 text-center cursor-pointer hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all group"
-                    >
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,image/gif"
-                        multiple
-                        className="hidden"
-                        onChange={handleFileSelect}
-                      />
-                      {isUploading ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <Loader2 className="size-4 animate-spin text-emerald-400" />
-                          <span className="text-sm text-muted-foreground">Uploading...</span>
+                    {isSeedanceModel ? (
+                      /* ===== Seedance: Two separate frame upload areas ===== */
+                      <>
+                        {/* Section label */}
+                        <div className="flex items-center gap-1.5">
+                          <ImagePlus className="size-3.5 text-muted-foreground" />
+                          <Label className="text-sm text-muted-foreground">Frames</Label>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">Optional</Badge>
                         </div>
-                      ) : (
-                        <>
-                          <Upload className="size-6 mx-auto text-muted-foreground group-hover:text-emerald-400 transition-colors" />
-                          <p className="text-xs text-muted-foreground mt-2">
-                            Click to upload images (JPEG, PNG, WebP · Large images auto-compressed)
-                          </p>
-                        </>
-                      )}
-                    </div>
 
-                    {/* URL input */}
-                    <div className="flex gap-2">
-                      <input
-                        type="url"
-                        placeholder="Or paste an image URL..."
-                        value={urlInput}
-                        onChange={(e) => setUrlInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleAddUrl()}
-                        className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-emerald-500/30"
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleAddUrl}
-                        disabled={!urlInput.trim()}
-                        className="shrink-0"
-                      >
-                        Add
-                      </Button>
-                    </div>
-
-                    {/* Uploaded images preview */}
-                    {(uploadedImages.length > 0 || imageUrls.length > 0) && (
-                      <div className="grid grid-cols-4 gap-2">
-                        {uploadedImages.map((img, i) => (
-                          <div key={`file-${i}`} className="relative group aspect-square rounded-lg overflow-hidden border border-white/10">
-                            <img src={img.preview} alt="" className="w-full h-full object-cover" />
-                            <button
-                              onClick={(e) => { e.stopPropagation(); removeImage(i, 'file') }}
-                              className="absolute top-1 right-1 size-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                        {/* Two side-by-side frame upload areas */}
+                        <div className="grid grid-cols-2 gap-3">
+                          {/* First Frame */}
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                              <span className="size-1.5 rounded-full bg-emerald-400" />
+                              First Frame
+                            </Label>
+                            <div
+                              onClick={() => seedanceFirstFrameRef.current?.click()}
+                              className="border-2 border-dashed border-white/10 rounded-xl aspect-video flex flex-col items-center justify-center cursor-pointer hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all group relative overflow-hidden"
                             >
-                              <X className="size-3" />
-                            </button>
-                          </div>
-                        ))}
-                        {imageUrls.map((url, i) => (
-                          <div key={`url-${i}`} className="relative group aspect-square rounded-lg overflow-hidden border border-white/10">
-                            <img src={url} alt="" className="w-full h-full object-cover" />
-                            <button
-                              onClick={(e) => { e.stopPropagation(); removeImage(i, 'url') }}
-                              className="absolute top-1 right-1 size-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
-                            >
-                              <X className="size-3" />
-                            </button>
-                            <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent p-1">
-                              <p className="text-[9px] text-white truncate">URL</p>
+                              <input
+                                ref={seedanceFirstFrameRef}
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp,image/gif"
+                                className="hidden"
+                                onChange={(e) => handleFrameUpload(e, 'first')}
+                              />
+                              {seedanceFirstFrameUploading ? (
+                                <Loader2 className="size-5 animate-spin text-emerald-400" />
+                              ) : seedanceFirstFrame ? (
+                                <>
+                                  <img src={seedanceFirstFrame.preview} alt="First frame" className="absolute inset-0 w-full h-full object-cover" />
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setSeedanceFirstFrame(null) }}
+                                    className="absolute top-1.5 right-1.5 size-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-red-500 transition-colors z-10"
+                                  >
+                                    <X className="size-3.5" />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="size-5 text-muted-foreground group-hover:text-emerald-400 transition-colors" />
+                                  <p className="text-[10px] text-muted-foreground mt-1">Click to upload</p>
+                                </>
+                              )}
                             </div>
                           </div>
-                        ))}
-                      </div>
+
+                          {/* Last Frame */}
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                              <span className="size-1.5 rounded-full bg-amber-400" />
+                              Last Frame
+                            </Label>
+                            <div
+                              onClick={() => seedanceLastFrameRef.current?.click()}
+                              className="border-2 border-dashed border-white/10 rounded-xl aspect-video flex flex-col items-center justify-center cursor-pointer hover:border-amber-500/30 hover:bg-amber-500/5 transition-all group relative overflow-hidden"
+                            >
+                              <input
+                                ref={seedanceLastFrameRef}
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp,image/gif"
+                                className="hidden"
+                                onChange={(e) => handleFrameUpload(e, 'last')}
+                              />
+                              {seedanceLastFrameUploading ? (
+                                <Loader2 className="size-5 animate-spin text-amber-400" />
+                              ) : seedanceLastFrame ? (
+                                <>
+                                  <img src={seedanceLastFrame.preview} alt="Last frame" className="absolute inset-0 w-full h-full object-cover" />
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setSeedanceLastFrame(null) }}
+                                    className="absolute top-1.5 right-1.5 size-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-red-500 transition-colors z-10"
+                                  >
+                                    <X className="size-3.5" />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="size-5 text-muted-foreground group-hover:text-amber-400 transition-colors" />
+                                  <p className="text-[10px] text-muted-foreground mt-1">Click to upload</p>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Reference Images (URL only for Seedance, since frames use dedicated upload) */}
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                            <ImagePlus className="size-3.5" />
+                            Reference Images (URL)
+                            <span className="text-[10px] text-muted-foreground/60">(optional)</span>
+                          </Label>
+                          <div className="flex gap-2">
+                            <input
+                              type="url"
+                              placeholder="https://example.com/image.png"
+                              value={urlInput}
+                              onChange={(e) => setUrlInput(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && handleAddUrl()}
+                              className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-emerald-500/30"
+                              dir="ltr"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleAddUrl}
+                              disabled={!urlInput.trim()}
+                              className="shrink-0"
+                            >
+                              Add
+                            </Button>
+                          </div>
+                          {imageUrls.length > 0 && (
+                            <div className="grid grid-cols-4 gap-2">
+                              {imageUrls.map((url, i) => (
+                                <div key={`url-${i}`} className="relative group aspect-square rounded-lg overflow-hidden border border-white/10">
+                                  <img src={url} alt="" className="w-full h-full object-cover" />
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); removeImage(i, 'url') }}
+                                    className="absolute top-1 right-1 size-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                                  >
+                                    <X className="size-3" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      /* ===== Other models: standard image upload ===== */
+                      <>
+                        <div className="flex items-center justify-between flex-wrap gap-1">
+                          <Label className="text-sm text-muted-foreground flex items-center gap-1.5">
+                            <ImagePlus className="size-3.5" />
+                            Reference Images
+                            <Badge variant={currentModelRequiresImage ? "destructive" : "outline"} className="text-[10px] px-1.5 py-0">
+                              {currentModelRequiresImage ? 'Required' : 'Optional'}
+                            </Badge>
+                          </Label>
+                          <span className="text-xs text-muted-foreground">
+                            {uploadedImages.length + imageUrls.length}/8
+                          </span>
+                        </div>
+
+                        {/* Upload area */}
+                        <div
+                          onClick={() => fileInputRef.current?.click()}
+                          className="border-2 border-dashed border-white/10 rounded-xl p-4 text-center cursor-pointer hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all group"
+                        >
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/gif"
+                            multiple
+                            className="hidden"
+                            onChange={handleFileSelect}
+                          />
+                          {isUploading ? (
+                            <div className="flex items-center justify-center gap-2">
+                              <Loader2 className="size-4 animate-spin text-emerald-400" />
+                              <span className="text-sm text-muted-foreground">Uploading...</span>
+                            </div>
+                          ) : (
+                            <>
+                              <Upload className="size-6 mx-auto text-muted-foreground group-hover:text-emerald-400 transition-colors" />
+                              <p className="text-xs text-muted-foreground mt-2">
+                                Click to upload images (JPEG, PNG, WebP · Large images auto-compressed)
+                              </p>
+                            </>
+                          )}
+                        </div>
+
+                        {/* URL input */}
+                        <div className="flex gap-2">
+                          <input
+                            type="url"
+                            placeholder="Or paste an image URL..."
+                            value={urlInput}
+                            onChange={(e) => setUrlInput(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleAddUrl()}
+                            className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-emerald-500/30"
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleAddUrl}
+                            disabled={!urlInput.trim()}
+                            className="shrink-0"
+                          >
+                            Add
+                          </Button>
+                        </div>
+
+                        {/* Uploaded images preview */}
+                        {(uploadedImages.length > 0 || imageUrls.length > 0) && (
+                          <div className="grid grid-cols-4 gap-2">
+                            {uploadedImages.map((img, i) => (
+                              <div key={`file-${i}`} className="relative group aspect-square rounded-lg overflow-hidden border border-white/10">
+                                <img src={img.preview} alt="" className="w-full h-full object-cover" />
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); removeImage(i, 'file') }}
+                                  className="absolute top-1 right-1 size-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                                >
+                                  <X className="size-3" />
+                                </button>
+                              </div>
+                            ))}
+                            {imageUrls.map((url, i) => (
+                              <div key={`url-${i}`} className="relative group aspect-square rounded-lg overflow-hidden border border-white/10">
+                                <img src={url} alt="" className="w-full h-full object-cover" />
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); removeImage(i, 'url') }}
+                                  className="absolute top-1 right-1 size-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                                >
+                                  <X className="size-3" />
+                                </button>
+                                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent p-1">
+                                  <p className="text-[9px] text-white truncate">URL</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
