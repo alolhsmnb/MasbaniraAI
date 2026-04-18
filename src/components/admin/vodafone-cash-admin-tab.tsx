@@ -33,6 +33,7 @@ import {
   Ban,
   Coins,
   AlertCircle,
+  Plus,
 } from 'lucide-react'
 
 interface VcSettings {
@@ -96,6 +97,19 @@ export function VodafoneCashAdminTab() {
   const [assignCredits, setAssignCredits] = useState('')
   const [assignUserId, setAssignUserId] = useState('')
   const [assigning, setAssigning] = useState(false)
+
+  // Manual create transaction
+  const [createModal, setCreateModal] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    fromNumber: '',
+    amount: '',
+    senderName: '',
+    trxId: '',
+    targetUserId: '',
+    targetCredits: '',
+    autoMatch: true,
+  })
+  const [creating, setCreating] = useState(false)
 
   const fetchSettings = useCallback(async () => {
     setLoading(true)
@@ -231,6 +245,51 @@ export function VodafoneCashAdminTab() {
     }
   }
 
+  const handleCreateTransaction = async () => {
+    if (!createForm.fromNumber || !createForm.amount) {
+      toast.error('Phone number and amount are required')
+      return
+    }
+    setCreating(true)
+    try {
+      const res = await fetch('/api/admin/vodafone-cash/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create',
+          fromNumber: createForm.fromNumber,
+          amount: parseFloat(createForm.amount),
+          senderName: createForm.senderName || undefined,
+          trxId: createForm.trxId || undefined,
+          targetUserId: createForm.targetUserId || undefined,
+          targetCredits: createForm.targetCredits ? parseInt(createForm.targetCredits) : undefined,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success(data.message)
+        setCreateModal(false)
+        setCreateForm({
+          fromNumber: '',
+          amount: '',
+          senderName: '',
+          trxId: '',
+          targetUserId: '',
+          targetCredits: '',
+          autoMatch: true,
+        })
+        fetchTransactions(txPage, txStatus, txSearch)
+        fetchSettings()
+      } else {
+        toast.error(data.error || 'Failed to create transaction')
+      }
+    } catch {
+      toast.error('Failed to create transaction')
+    } finally {
+      setCreating(false)
+    }
+  }
+
   const statusColor = (status: string) => {
     switch (status) {
       case 'COMPLETED':
@@ -292,6 +351,14 @@ export function VodafoneCashAdminTab() {
         >
           <RefreshCw className="size-3.5" />
           Refresh
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => setCreateModal(true)}
+          className="gap-1.5 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white"
+        >
+          <Plus className="size-3.5" />
+          Add Transaction
         </Button>
       </div>
 
@@ -550,6 +617,101 @@ export function VodafoneCashAdminTab() {
           </div>
         )}
       </div>
+
+      {/* Manual Create Transaction Modal */}
+      {createModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="glass-card p-6 w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <Plus className="size-5 text-red-400" />
+              Add Manual Transaction
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Use this when SMS was not received by the system. The system will try to auto-match the phone number to a registered user.
+            </p>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Sender Phone Number *</Label>
+                <Input
+                  value={createForm.fromNumber}
+                  onChange={(e) => setCreateForm({ ...createForm, fromNumber: e.target.value.replace(/\D/g, '').slice(0, 11) })}
+                  placeholder="01009971855"
+                  dir="ltr"
+                  className="font-mono"
+                  maxLength={11}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Amount (EGP) *</Label>
+                <Input
+                  type="number"
+                  value={createForm.amount}
+                  onChange={(e) => setCreateForm({ ...createForm, amount: e.target.value })}
+                  placeholder="30.16"
+                  min="0"
+                  step="0.01"
+                  dir="ltr"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Sender Name (optional)</Label>
+                <Input
+                  value={createForm.senderName}
+                  onChange={(e) => setCreateForm({ ...createForm, senderName: e.target.value })}
+                  placeholder="Zeinab"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Transaction ID (optional)</Label>
+                <Input
+                  value={createForm.trxId}
+                  onChange={(e) => setCreateForm({ ...createForm, trxId: e.target.value })}
+                  placeholder="Auto-generated if empty"
+                  dir="ltr"
+                />
+              </div>
+              <Separator />
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Target User ID (optional - auto-match if empty)</Label>
+                <Input
+                  value={createForm.targetUserId}
+                  onChange={(e) => setCreateForm({ ...createForm, targetUserId: e.target.value })}
+                  placeholder="Leave empty to auto-match by phone"
+                  dir="ltr"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Custom Credits (optional)</Label>
+                <Input
+                  type="number"
+                  value={createForm.targetCredits}
+                  onChange={(e) => setCreateForm({ ...createForm, targetCredits: e.target.value })}
+                  placeholder="Auto-calculated from amount × rate"
+                  dir="ltr"
+                  min="1"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                className="flex-1"
+                variant="outline"
+                onClick={() => setCreateModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white"
+                disabled={creating || !createForm.fromNumber || !createForm.amount}
+                onClick={handleCreateTransaction}
+              >
+                {creating ? <Loader2 className="size-4 animate-spin" /> : <Coins className="size-4" />}
+                {creating ? 'Creating...' : 'Create and Add Credits'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Manual Assign Modal */}
       {assignModal && (

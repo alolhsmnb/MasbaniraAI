@@ -162,6 +162,113 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    if (action === 'create') {
+      // Manually create a new transaction (for when SMS is not received)
+      const { fromNumber, amount, senderName, trxId: customTrxId, targetUserId, targetCredits } = await request.json()
+
+      if (!fromNumber || !amount) {
+        return NextResponse.json(
+          { success: false, error: 'Phone number and amount are required' },
+          { status: 400 }
+        )
+      }
+
+      // Check for duplicate trxId
+      const trxIdValue = customTrxId || `manual_${Date.now()}`
+      const existingTrx = await db.vodafoneCashTransaction.findUnique({
+        where: { trxId: trxIdValue },
+      })
+      if (existingTrx) {
+        return NextResponse.json({ success: false, error: 'Transaction ID already exists' }, { status: 409 })
+      }
+
+      // Get settings
+      const creditsPerEgpSetting = await db.siteSetting.findUnique({ where: { key: 'vodafone_credits_per_egp' } })
+      const creditsPerEgp = parseFloat(creditsPerEgpSetting?.value || '1')
+
+      const creditsToAdd = targetCredits || Math.max(1, Math.round(parseFloat(amount) * creditsPerEgp))
+
+      // If targetUserId is provided, directly complete the transaction
+      if (targetUserId) {
+        const targetUser = await db.user.findUnique({ where: { id: targetUserId } })
+        if (!targetUser) {
+          return NextResponse.json({ success: false, error: 'Target user not found' }, { status: 404 })
+        }
+
+        const [updatedUser] = await db.$transaction([
+          db.user.update({
+            where: { id: targetUserId },
+            data: { paidCredits: { increment: creditsToAdd } },
+          }),
+          db.vodafoneCashTransaction.create({
+            data: {
+              trxId: trxIdValue,
+              sender: senderName || fromNumber,
+              message: 'Manual transaction created by admin',
+              fromNumber: String(fromNumber).replace(/^(\+20|02|20)/, '').trim(),
+              amountEGP: parseFloat(amount),
+              creditsAdded: creditsToAdd,
+              status: 'COMPLETED',
+              userId: targetUserId,
+              processedAt: new Date(),
+            },
+          }),
+        ])
+
+        return NextResponse.json({
+          success: true,
+          message: `Manual transaction created: ${creditsToAdd} credits added to ${targetUser.email}`,
+          data: { newPaidCredits: updatedUser.paidCredits },
+        })
+      }
+
+      // No target user - create as RECEIVED
+      const transaction = await db.vodafoneCashTransaction.create({
+        data: {
+          trxId: trxIdValue,
+          sender: senderName || fromNumber,
+          message: 'Manual transaction created by admin',
+          fromNumber: String(fromNumber).replace(/^(\+20|02|20)/, '').trim(),
+          amountEGP: parseFloat(amount),
+          status: 'RECEIVED',
+        },
+      })
+
+      // Try to auto-match by phone number
+      const normalizedNumber = String(fromNumber).replace(/^(\+20|02|20)/, '').trim()
+      const matchedUser = await db.user.findUnique({ where: { vodafoneCashNumber: normalizedNumber } })
+
+      if (matchedUser && !matchedUser.isBanned) {
+        const [updatedUser] = await db.$transaction([
+          db.user.update({
+            where: { id: matchedUser.id },
+            data: { paidCredits: { increment: creditsToAdd } },
+          }),
+          db.vodafoneCashTransaction.update({
+            where: { id: transaction.id },
+            data: {
+              userId: matchedUser.id,
+              creditsAdded: creditsToAdd,
+              status: 'COMPLETED',
+              processedAt: new Date(),
+            },
+          }),
+        ])
+
+        return NextResponse.json({
+          success: true,
+          message: `Transaction auto-matched: ${creditsToAdd} credits added to ${matchedUser.email}`,
+          data: { newPaidCredits: updatedUser.paidCredits },
+        })
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Transaction created (no matching user found)',
+        data: { trxId: trxIdValue, status: 'RECEIVED' },
+      })
+    }
+
     return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 })
   } catch (error) {
     console.error('[VodafoneCash Admin] Error processing action:', error)
