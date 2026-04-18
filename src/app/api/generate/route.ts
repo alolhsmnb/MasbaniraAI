@@ -119,8 +119,8 @@ export async function POST(request: NextRequest) {
         prompt: prompt.trim(),
         web_search: seedanceWebSearch === true,
         generate_audio: seedanceGenerateAudio === true,
-        resolution: seedanceResolution || '720p',
-        duration: duration || 5,
+        resolution: '480p',
+        duration: 5,
       }
 
       // Aspect ratio (Seedance supports: 1:1, 4:3, 3:4, 16:9, 9:16, 21:9, adaptive)

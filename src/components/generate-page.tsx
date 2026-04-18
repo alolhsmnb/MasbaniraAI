@@ -840,44 +840,19 @@ export function GeneratePage() {
                           {/* Seedance: Full settings */}
                           {isSeedanceModel ? (
                             <div className="space-y-3">
-                              {/* Duration slider */}
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between">
+                              {/* Duration & Resolution - Fixed */}
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="space-y-2">
                                   <Label className="text-xs text-muted-foreground">Duration</Label>
-                                  <span className="text-xs font-medium text-emerald-400">{seedanceDuration}s</span>
+                                  <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-muted-foreground">
+                                    5s · Fixed
+                                  </div>
                                 </div>
-                                <input
-                                  type="range"
-                                  min={4}
-                                  max={15}
-                                  step={1}
-                                  value={seedanceDuration}
-                                  onChange={(e) => setSeedanceDuration(parseInt(e.target.value))}
-                                  className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-emerald-500"
-                                />
-                                <div className="flex justify-between text-[10px] text-muted-foreground">
-                                  <span>4s</span>
-                                  <span>15s</span>
-                                </div>
-                              </div>
-
-                              {/* Resolution */}
-                              <div className="space-y-2">
-                                <Label className="text-xs text-muted-foreground">Resolution</Label>
-                                <div className="grid grid-cols-2 gap-2">
-                                  {SEEDANCE_RESOLUTIONS.map((res) => (
-                                    <button
-                                      key={res}
-                                      onClick={() => setSeedanceResolution(res)}
-                                      className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                                        seedanceResolution === res
-                                          ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/20'
-                                          : 'bg-white/5 border border-white/10 text-muted-foreground hover:border-emerald-500/30 hover:text-foreground'
-                                      }`}
-                                    >
-                                      {res === '720p' ? '🎬 720p HD' : '📹 480p Fast'}
-                                    </button>
-                                  ))}
+                                <div className="space-y-2">
+                                  <Label className="text-xs text-muted-foreground">Resolution</Label>
+                                  <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-muted-foreground">
+                                    480p · Fixed
+                                  </div>
                                 </div>
                               </div>
 
