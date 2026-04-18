@@ -111,6 +111,30 @@ export async function POST(request: NextRequest) {
         enableTranslation: enableTranslation !== false,
         watermark: watermark || undefined,
       })
+    } else if (model.modelId === 'bytedance/seedance-2-fast') {
+      // Seedance 2 Fast - specific input format
+      const taskInput: Parameters<typeof createTask>[1] = {
+        prompt: prompt.trim(),
+        web_search: false,
+        generate_audio: true,
+        resolution: '480p',
+        duration: 5,
+      }
+
+      if (aspectRatio && aspectRatio !== 'auto') {
+        taskInput.aspect_ratio = aspectRatio
+      }
+
+      // Seedance uses first_frame_url for single image, reference_image_urls for multiple
+      if (imageInput && Array.isArray(imageInput) && imageInput.length > 0) {
+        if (imageInput.length === 1) {
+          taskInput.first_frame_url = imageInput[0]
+        } else {
+          taskInput.reference_image_urls = imageInput
+        }
+      }
+
+      taskResult = await createTask(model.modelId, taskInput)
     } else {
       // Standard KIE.AI models - uses /api/v1/jobs/createTask endpoint
       const taskInput: Parameters<typeof createTask>[1] = {

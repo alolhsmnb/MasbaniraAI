@@ -705,8 +705,8 @@ export function GeneratePage() {
                         className="overflow-hidden"
                       >
                         <div className="px-3 pb-3 space-y-3">
-                          {/* Video Mode (Grok only) */}
-                          {isVideoModel && !isSora2Model && (
+                          {/* Video Mode (Grok only, not Seedance) */}
+                          {isVideoModel && !isSora2Model && !isSeedanceModel && (
                             <div className="space-y-2">
                               <Label className="text-xs text-muted-foreground">Motion Style</Label>
                               <div className="grid grid-cols-3 gap-2">
@@ -729,8 +729,8 @@ export function GeneratePage() {
                               )}
                             </div>
                           )}
-                          {/* Video Duration (Grok only) */}
-                          {isVideoModel && !isSora2Model && !isVeoModel && (
+                          {/* Video Duration (Grok only, not Seedance) */}
+                          {isVideoModel && !isSora2Model && !isVeoModel && !isSeedanceModel && (
                             <div className="space-y-2">
                               <div className="flex items-center justify-between">
                                 <Label className="text-xs text-muted-foreground">Duration</Label>
@@ -792,8 +792,23 @@ export function GeneratePage() {
                               </button>
                             </div>
                           )}
-                          {/* Video Resolution (Grok only) */}
-                          {isVideoModel ? (
+                          {/* Seedance: Fixed Resolution & Duration info */}
+                          {isSeedanceModel ? (
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground">Resolution</Label>
+                                <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-muted-foreground">
+                                  480p · Fixed
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground">Duration</Label>
+                                <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-muted-foreground">
+                                  5s · Fixed
+                                </div>
+                              </div>
+                            </div>
+                          ) : isVideoModel ? (
                             <div className="space-y-2">
                               <Label className="text-xs text-muted-foreground">Resolution</Label>
                               <Select value={videoResolution} onValueChange={(val) => setVideoResolution(val)}>

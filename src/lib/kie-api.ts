@@ -18,6 +18,12 @@ export interface CreateTaskInput {
   remove_watermark?: boolean
   upload_method?: string
   nsfw_checker?: boolean
+  // Seedance-specific fields
+  web_search?: boolean
+  generate_audio?: boolean
+  first_frame_url?: string
+  last_frame_url?: string
+  reference_image_urls?: string[]
 }
 
 export interface VeoCreateInput {
@@ -137,6 +143,22 @@ export async function createTask(
   }
   if (input.upload_method) {
     inputObj.upload_method = input.upload_method
+  }
+  // Seedance-specific fields
+  if (input.web_search !== undefined) {
+    inputObj.web_search = input.web_search
+  }
+  if (input.generate_audio !== undefined) {
+    inputObj.generate_audio = input.generate_audio
+  }
+  if (input.first_frame_url) {
+    inputObj.first_frame_url = input.first_frame_url
+  }
+  if (input.last_frame_url) {
+    inputObj.last_frame_url = input.last_frame_url
+  }
+  if (input.reference_image_urls && input.reference_image_urls.length > 0) {
+    inputObj.reference_image_urls = input.reference_image_urls
   }
 
   const body: Record<string, unknown> = {
