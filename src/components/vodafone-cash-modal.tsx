@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -32,6 +32,8 @@ import {
   Trash2,
   Info,
   RefreshCw,
+  Sparkles,
+  PartyPopper,
 } from 'lucide-react'
 
 interface VcSettings {
@@ -59,17 +61,89 @@ export function VodafoneCashModal({ open, onClose }: VodafoneCashModalProps) {
   const [registered, setRegistered] = useState(false)
 
   // View state: 'register' | 'deposit' | 'success'
-  const [view, setView] = useState<'register' | 'deposit'>('register')
+  const [view, setView] = useState<'register' | 'deposit' | 'success'>('register')
 
   // Refreshing credits
   const [refreshing, setRefreshing] = useState(false)
+
+  // Success state
+  const [addedCredits, setAddedCredits] = useState(0)
+
+  // Track previous paid credits to detect changes
+  const prevPaidCreditsRef = useRef<number>(0)
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Start polling when modal opens on deposit view
+  const startPolling = useCallback(() => {
+    // Store current paidCredits as baseline
+    prevPaidCreditsRef.current = credits?.paidCredits ?? 0
+
+    // Clear any existing interval
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+    }
+
+    // Poll every 5 seconds
+    pollingIntervalRef.current = setInterval(async () => {
+      try {
+        const res = await fetch('/api/user/credits')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.success && data.data) {
+            const newPaidCredits = data.data.paidCredits
+
+            // Check if credits increased (payment detected!)
+            if (newPaidCredits > prevPaidCreditsRef.current) {
+              const diff = newPaidCredits - prevPaidCreditsRef.current
+              setAddedCredits(diff)
+              setCredits(data.data)
+              prevPaidCreditsRef.current = newPaidCredits
+
+              // Stop polling
+              if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current)
+                pollingIntervalRef.current = null
+              }
+
+              // Show success view
+              setView('success')
+            }
+          }
+        }
+      } catch {
+        // Silent poll failure
+      }
+    }, 5000)
+  }, [credits?.paidCredits, setCredits])
+
+  // Stop polling
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+      pollingIntervalRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     if (open) {
       fetchSettings()
       setView('register')
+      setAddedCredits(0)
+    } else {
+      stopPolling()
     }
-  }, [open])
+
+    return () => stopPolling()
+  }, [open, stopPolling])
+
+  // Start polling when view changes to deposit
+  useEffect(() => {
+    if (view === 'deposit' && open && registered) {
+      startPolling()
+    } else if (view === 'success') {
+      stopPolling()
+    }
+  }, [view, open, registered, startPolling, stopPolling])
 
   const fetchSettings = async () => {
     setLoading(true)
@@ -366,14 +440,17 @@ export function VodafoneCashModal({ open, onClose }: VodafoneCashModalProps) {
                   </div>
                 </div>
 
-                {/* Auto-match notice */}
+                {/* Auto-match notice with live status */}
                 <div className="flex items-start gap-3 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
-                  <Shield className="size-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <div className="relative">
+                    <Shield className="size-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <span className="absolute -top-1 -right-1 size-2 rounded-full bg-emerald-400 animate-pulse" />
+                  </div>
                   <div>
-                    <p className="text-xs font-medium text-emerald-400 mb-0.5">Automatic Matching</p>
+                    <p className="text-xs font-medium text-emerald-400 mb-0.5">Automatic Detection Active</p>
                     <p className="text-[11px] text-muted-foreground leading-relaxed">
-                      Credits are added automatically when we receive the transfer confirmation.
-                      The system matches your registered number ({phone}) with the sender number.
+                      Waiting for your transfer... Credits will appear here automatically.
+                      Keep this window open after sending.
                     </p>
                   </div>
                 </div>
@@ -388,6 +465,131 @@ export function VodafoneCashModal({ open, onClose }: VodafoneCashModalProps) {
                   <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
                   {refreshing ? 'Checking...' : 'Refresh Credits'}
                 </Button>
+              </motion.div>
+            )}
+
+            {/* ─── SUCCESS VIEW ─── */}
+            {view === 'success' && (
+              <motion.div
+                key="success"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
+                className="space-y-5 py-2"
+              >
+                {/* Animated checkmark circle */}
+                <div className="flex flex-col items-center justify-center space-y-4">
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.2, type: 'spring', stiffness: 200, damping: 15 }}
+                    className="relative"
+                  >
+                    {/* Outer glow ring */}
+                    <motion.div
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1.3, opacity: 0 }}
+                      transition={{ delay: 0.3, duration: 1.5, repeat: 2 }}
+                      className="absolute inset-0 rounded-full bg-emerald-500/20"
+                      style={{ margin: '-8px' }}
+                    />
+                    {/* Main circle */}
+                    <div className="relative size-20 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                      <motion.div
+                        initial={{ scale: 0, rotate: -45 }}
+                        animate={{ scale: 1, rotate: 0 }}
+                        transition={{ delay: 0.4, type: 'spring', stiffness: 300, damping: 12 }}
+                      >
+                        <svg
+                          className="size-10 text-white"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={3}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <motion.path
+                            d="M5 13l4 4L19 7"
+                            initial={{ pathLength: 0 }}
+                            animate={{ pathLength: 1 }}
+                            transition={{ delay: 0.5, duration: 0.5, ease: 'easeOut' }}
+                          />
+                        </svg>
+                      </motion.div>
+                    </div>
+                  </motion.div>
+
+                  {/* Success text */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.6 }}
+                    className="text-center space-y-2"
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      <PartyPopper className="size-5 text-amber-400" />
+                      <h3 className="text-xl font-bold text-emerald-400">Payment Successful!</h3>
+                      <PartyPopper className="size-5 text-amber-400" />
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Your transfer has been confirmed and credits have been added.
+                    </p>
+                  </motion.div>
+
+                  {/* Credits badge */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.8 }}
+                    className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 w-full"
+                  >
+                    <div className="flex items-center justify-center gap-3">
+                      <Sparkles className="size-5 text-emerald-400" />
+                      <div className="text-center">
+                        <p className="text-xs text-muted-foreground mb-0.5">Credits Added</p>
+                        <p className="text-2xl font-bold text-emerald-400">
+                          +{addedCredits}
+                        </p>
+                      </div>
+                      <Sparkles className="size-5 text-emerald-400" />
+                    </div>
+                    <div className="mt-3 pt-3 border-t border-emerald-500/10 flex items-center justify-center gap-2">
+                      <Wallet className="size-3.5 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">
+                        New Balance: <span className="font-semibold text-foreground">{credits?.totalCredits ?? 0} credits</span>
+                      </span>
+                    </div>
+                  </motion.div>
+                </div>
+
+                {/* Action buttons */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 1.0 }}
+                  className="space-y-2"
+                >
+                  <Button
+                    className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold h-11"
+                    onClick={onClose}
+                  >
+                    Start Creating
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2"
+                    onClick={() => {
+                      setAddedCredits(0)
+                      prevPaidCreditsRef.current = credits?.paidCredits ?? 0
+                      setView('deposit')
+                    }}
+                  >
+                    <ArrowLeft className="size-4" />
+                    Deposit More
+                  </Button>
+                </motion.div>
               </motion.div>
             )}
           </AnimatePresence>
