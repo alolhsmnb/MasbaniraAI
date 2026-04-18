@@ -119,61 +119,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invalid credits per EGP' }, { status: 400 })
     }
 
-    // Upsert each setting
-    const updates: Promise<any>[] = []
+    // Upsert each setting sequentially to avoid concurrent conflicts
+    const settingsToSave = [
+      { key: 'vodafone_merchant_number', value: merchantNumber !== undefined ? String(merchantNumber).replace(/^(\+20|02|20)/, '').trim() : undefined },
+      { key: 'vodafone_min_amount_egp', value: minAmountEGP !== undefined ? String(parseFloat(minAmountEGP)) : undefined },
+      { key: 'vodafone_credits_per_egp', value: creditsPerEgp !== undefined ? String(parseFloat(creditsPerEgp)) : undefined },
+      { key: 'vodafone_is_enabled', value: isEnabled !== undefined ? (isEnabled ? 'true' : 'false') : undefined },
+      { key: 'vodafone_webhook_secret', value: webhookSecret !== undefined ? String(webhookSecret) : undefined },
+    ]
 
-    if (merchantNumber !== undefined) {
-      const normalized = String(merchantNumber).replace(/^(\+20|02|20)/, '').trim()
-      updates.push(
-        db.siteSetting.upsert({
-          where: { key: 'vodafone_merchant_number' },
-          update: { value: normalized },
-          create: { key: 'vodafone_merchant_number', value: normalized },
+    for (const setting of settingsToSave) {
+      if (setting.value === undefined) continue
+      try {
+        await db.siteSetting.upsert({
+          where: { key: setting.key },
+          update: { value: setting.value },
+          create: { key: setting.key, value: setting.value },
         })
-      )
+      } catch (dbErr) {
+        console.error(`[VodafoneCash Admin] Failed to save setting ${setting.key}:`, dbErr)
+        return NextResponse.json({ success: false, error: `Failed to save ${setting.key}` }, { status: 500 })
+      }
     }
-
-    if (minAmountEGP !== undefined) {
-      updates.push(
-        db.siteSetting.upsert({
-          where: { key: 'vodafone_min_amount_egp' },
-          update: { value: String(parseFloat(minAmountEGP)) },
-          create: { key: 'vodafone_min_amount_egp', value: String(parseFloat(minAmountEGP)) },
-        })
-      )
-    }
-
-    if (creditsPerEgp !== undefined) {
-      updates.push(
-        db.siteSetting.upsert({
-          where: { key: 'vodafone_credits_per_egp' },
-          update: { value: String(parseFloat(creditsPerEgp)) },
-          create: { key: 'vodafone_credits_per_egp', value: String(parseFloat(creditsPerEgp)) },
-        })
-      )
-    }
-
-    if (isEnabled !== undefined) {
-      updates.push(
-        db.siteSetting.upsert({
-          where: { key: 'vodafone_is_enabled' },
-          update: { value: isEnabled ? 'true' : 'false' },
-          create: { key: 'vodafone_is_enabled', value: isEnabled ? 'true' : 'false' },
-        })
-      )
-    }
-
-    if (webhookSecret !== undefined) {
-      updates.push(
-        db.siteSetting.upsert({
-          where: { key: 'vodafone_webhook_secret' },
-          update: { value: String(webhookSecret) },
-          create: { key: 'vodafone_webhook_secret', value: String(webhookSecret) },
-        })
-      )
-    }
-
-    await Promise.all(updates)
 
     return NextResponse.json({
       success: true,
@@ -181,6 +148,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('[VodafoneCash Admin] Error saving settings:', error)
-    return NextResponse.json({ success: false, error: 'Failed to save settings' }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Failed to save settings'
+    return NextResponse.json({ success: false, error: message }, { status: 500 })
   }
 }
