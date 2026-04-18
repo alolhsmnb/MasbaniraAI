@@ -63,8 +63,8 @@ run-dev.sh
 restart.log
 Caddyfile
 db/*.db
-upload/
-uploads/
+/upload/
+/uploads/
 download/
 examples/
 
