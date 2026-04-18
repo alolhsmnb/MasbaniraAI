@@ -38,30 +38,31 @@ export async function GET(request: NextRequest) {
       settingsMap[s.key] = s.value
     })
 
-    // Get transaction stats + registered users in parallel (6 queries combined)
-    const [
-      totalTx,
-      completedTx,
-      pendingTx,
-      totalCreditsAdded,
-      totalAmountEGP,
-      registeredUsers,
-    ] = await Promise.all([
-      db.vodafoneCashTransaction.count(),
-      db.vodafoneCashTransaction.count({ where: { status: 'COMPLETED' } }),
-      db.vodafoneCashTransaction.count({ where: { status: 'RECEIVED' } }),
-      db.vodafoneCashTransaction.aggregate({
-        where: { status: 'COMPLETED' },
-        _sum: { creditsAdded: true },
+    // Get all stats in 2 queries (down from 6)
+    const [allStats, completedStats, registeredUsers] = await Promise.all([
+      db.vodafoneCashTransaction.groupBy({
+        by: ['status'],
+        _count: true,
       }),
       db.vodafoneCashTransaction.aggregate({
         where: { status: 'COMPLETED' },
-        _sum: { amountEGP: true },
+        _sum: { creditsAdded: true, amountEGP: true },
+        _count: true,
       }),
       db.user.count({
         where: { vodafoneCashNumber: { not: null } },
       }),
     ])
+
+    // Parse groupBy results into counts
+    let totalTx = 0
+    let completedTx = 0
+    let pendingTx = 0
+    for (const row of allStats) {
+      totalTx += row._count
+      if (row.status === 'COMPLETED') completedTx = row._count
+      if (row.status === 'RECEIVED') pendingTx = row._count
+    }
 
     return NextResponse.json({
       success: true,
@@ -77,8 +78,8 @@ export async function GET(request: NextRequest) {
           totalTransactions: totalTx,
           completedTransactions: completedTx,
           pendingTransactions: pendingTx,
-          totalCreditsAdded: totalCreditsAdded._sum.creditsAdded || 0,
-          totalAmountEGP: totalAmountEGP._sum.amountEGP || 0,
+          totalCreditsAdded: completedStats._sum.creditsAdded || 0,
+          totalAmountEGP: completedStats._sum.amountEGP || 0,
           registeredUsers,
         },
       },
