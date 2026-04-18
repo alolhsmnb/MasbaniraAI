@@ -238,6 +238,16 @@ export function GeneratePage() {
         body: formData,
       })
 
+      if (!res.ok) {
+        let errorMsg = `Upload failed (${res.status})`
+        try {
+          const errData = await res.json()
+          errorMsg = errData.error || errorMsg
+        } catch { /* ignore parse error */ }
+        toast.error(errorMsg)
+        return
+      }
+
       const data = await res.json()
       if (data.success && data.data?.urls) {
         const newImages = toUpload.map((file, i) => ({
@@ -250,7 +260,8 @@ export function GeneratePage() {
       } else {
         toast.error(data.error || 'Upload failed')
       }
-    } catch {
+    } catch (err) {
+      console.error('Upload error:', err)
       toast.error('Failed to upload images')
     } finally {
       setIsUploading(false)
