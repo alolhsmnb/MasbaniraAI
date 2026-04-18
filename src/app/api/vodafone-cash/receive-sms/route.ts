@@ -21,18 +21,53 @@ export async function POST(request: NextRequest) {
   console.log('[VodafoneCash] 📩 Received webhook request')
 
   try {
-    const body: SmsPayload = await request.json()
-    const { sender, message, amount, trx_id, from_number } = body
+    const body = await request.json()
+    let { sender, message, amount, trx_id, from_number, received_at } = body
 
-    console.log(`[VodafoneCash] Payload: sender=${sender}, from=${from_number}, amount=${amount}, trxId=${trx_id}`)
+    console.log(`[VodafoneCash] Raw payload:`, JSON.stringify(body))
 
-    // Validate required fields
-    if (!trx_id || !from_number || !amount || !sender) {
-      console.log('[VodafoneCash] ❌ Missing required fields')
+    // If amount is 0, try to extract from message
+    if (!amount || amount === 0) {
+      const amountMatch = (message || '').match(/([\d.]+)\s*ج\.م|([\d.]+)\s*EGP|([\d.]+)\s*جنيه|استلام مبلغ\s*([\d.]+)/)
+      if (amountMatch) {
+        amount = parseFloat(amountMatch[1] || amountMatch[2] || amountMatch[3] || amountMatch[4])
+        console.log(`[VodafoneCash] Extracted amount from message: ${amount}`)
+      }
+    }
+
+    // If trx_id is missing, generate one
+    if (!trx_id) {
+      trx_id = `auto_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
+      console.log(`[VodafoneCash] Generated trx_id: ${trx_id}`)
+    }
+
+    // If from_number is missing, try to extract from message
+    if (!from_number) {
+      const numberMatch = (message || '').match(/من رقم\s*(\d{11})|من\s*(01\d{9})/)
+      if (numberMatch) {
+        from_number = numberMatch[1] || numberMatch[2]
+        console.log(`[VodafoneCash] Extracted from_number from message: ${from_number}`)
+      }
+    }
+
+    // Validate minimum required fields (be lenient - only amount and a number are truly needed)
+    if (!from_number || !amount) {
+      console.log('[VodafoneCash] ❌ Cannot process - missing from_number or amount', {
+        sender,
+        from_number,
+        amount,
+        trx_id,
+        messageLength: (message || '').length,
+      })
       return NextResponse.json(
-        { success: false, error: 'Missing required fields', details: { trx_id, from_number, amount, sender } },
+        { success: false, error: 'Missing from_number or amount', details: { sender, from_number, amount, trx_id } },
         { status: 400 }
       )
+    }
+
+    // Default sender to from_number if missing
+    if (!sender) {
+      sender = from_number
     }
 
     // Rate limit: prevent duplicate rapid-fire requests
