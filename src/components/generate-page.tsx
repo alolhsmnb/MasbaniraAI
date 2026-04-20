@@ -146,6 +146,9 @@ export function GeneratePage() {
   // Show ads only if user has 0 paid credits
   const showAds = (credits?.paidCredits ?? 0) <= 0
 
+  // Settings collapsed
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
 
 
   // Compute current cost based on model pricing and options
