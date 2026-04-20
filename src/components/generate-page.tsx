@@ -148,7 +148,7 @@ export function GeneratePage() {
 
   // Settings collapsed
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const pollRef = useRef<NodeJS.Timeout | null>(null)
+  const pollTimeoutsRef = useRef<NodeJS.Timeout[]>([])
 
   // Compute current cost based on model pricing and options
   const currentCost = useMemo(() => {
