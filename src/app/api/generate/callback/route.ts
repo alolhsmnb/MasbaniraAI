@@ -2,24 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { extractResultUrl, isTaskCompleted, isTaskFailed } from '@/lib/kie-api'
 
-// Notify WebSocket service about generation update (fire-and-forget)
-async function notifyClient(userId: string, taskId: string, status: string, resultUrl?: string | null, errorTitle?: string | null, errorMessage?: string | null) {
-  try {
-    const notifyUrl = process.env.NOTIFICATION_SERVICE_URL || `http://localhost:3003/notify`
-    await fetch(notifyUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, taskId, status, resultUrl, errorTitle, errorMessage }),
-    })
-  } catch {
-    // Notification service unavailable, silently ignore
-  }
-}
-
 /**
  * KIE.AI Callback Webhook
  * 
  * KIE.AI POSTs task results here when generation completes.
+ * 
+ * Flow:
+ * 1. KIE.AI sends callback with task result
+ * 2. We extract the result URL and update the database
+ * 3. Supabase Realtime automatically pushes the change to the frontend
+ * 4. The generate page instantly shows the result — no polling needed
  * 
  * Expected payload structure:
  * {
@@ -119,6 +111,7 @@ export async function POST(request: NextRequest) {
       if (resultUrl) {
         console.log(`[Callback] Successfully extracted URL: ${resultUrl.substring(0, 150)}...`)
 
+        // Update DB — Supabase Realtime will automatically notify the frontend
         await db.generation.update({
           where: { id: generation.id },
           data: {
@@ -126,9 +119,6 @@ export async function POST(request: NextRequest) {
             resultUrl,
           },
         })
-
-        // Notify frontend via WebSocket
-        await notifyClient(generation.userId, taskId, 'COMPLETED', resultUrl)
       } else {
         // Try regex fallback to find any URL in the raw data
         const rawStr = JSON.stringify(resultData)
@@ -143,9 +133,6 @@ export async function POST(request: NextRequest) {
               resultUrl: urlMatch[0],
             },
           })
-
-          // Notify frontend via WebSocket
-          await notifyClient(generation.userId, taskId, 'COMPLETED', urlMatch[0])
         } else {
           // Couldn't extract URL, save raw result
           const jsonResult = typeof resultData === 'string'
@@ -169,6 +156,7 @@ export async function POST(request: NextRequest) {
 
       console.error(`[Callback] Task ${taskId} failed:`, errorMsg)
 
+      // Update DB — Supabase Realtime will automatically notify the frontend
       await db.generation.update({
         where: { id: generation.id },
         data: {
@@ -178,23 +166,17 @@ export async function POST(request: NextRequest) {
       })
 
       // Refund credits if the generation had a cost
-      let wasRefunded = false
       if (generation.cost && generation.cost > 0) {
         try {
           await db.user.update({
             where: { id: generation.userId },
             data: { paidCredits: { increment: generation.cost } },
           })
-          wasRefunded = true
           console.log(`[Callback Refund] Refunded ${generation.cost} credits to user ${generation.userId} (callback task ${taskId} failed)`)
         } catch (refundErr) {
           console.error('[Callback Refund] Failed to refund credits:', refundErr)
         }
       }
-
-      // Notify frontend via WebSocket
-      const failMessage = typeof errorMsg === 'string' ? errorMsg : 'Generation failed'
-      await notifyClient(generation.userId, taskId, 'FAILED', null, 'Generation Failed', wasRefunded ? failMessage + ' Credits have been refunded.' : failMessage)
     } else {
       // Still processing
       console.log(`[Callback] Task ${taskId} state: ${stateOrStatus}, keeping as PROCESSING`)

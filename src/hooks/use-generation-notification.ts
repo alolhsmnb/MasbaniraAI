@@ -1,17 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useCallback } from 'react'
-import { io, Socket } from 'socket.io-client'
 import { useAppStore } from '@/store/app-store'
-import { toast } from 'sonner'
-
-interface GenerationUpdate {
-  taskId: string
-  status: string
-  resultUrl?: string | null
-  errorTitle?: string | null
-  errorMessage?: string | null
-}
+import { supabase } from '@/lib/supabase'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 
 interface UseGenerationNotificationOptions {
   activeTaskId: string | null
@@ -24,14 +16,14 @@ export function useGenerationNotification({
   onCompleted,
   onFailed,
 }: UseGenerationNotificationOptions) {
-  const socketRef = useRef<Socket | null>(null)
+  const channelRef = useRef<RealtimeChannel | null>(null)
   const { user } = useAppStore()
   const callbacksRef = useRef({ onCompleted, onFailed })
   useEffect(() => {
     callbacksRef.current = { onCompleted, onFailed }
   }, [onCompleted, onFailed])
 
-  // Refresh credits and history after completion/failure
+  // Refresh credits after completion/failure
   const refreshState = useCallback(async () => {
     try {
       const creditsRes = await fetch('/api/user/credits')
@@ -42,65 +34,69 @@ export function useGenerationNotification({
         }
       }
     } catch { /* silent */ }
-    try {
-      const histRes = await fetch('/api/generate/history?page=1&limit=4')
-      if (histRes.ok) {
-        const histData = await histRes.json()
-        if (histData.success) {
-          // We can't directly set recentGenerations from here, but the parent can re-fetch
-        }
-      }
-    } catch { /* silent */ }
   }, [])
 
   useEffect(() => {
     if (!user?.id) return
 
-    // Connect to notification service
-    const socket = io('/?XTransformPort=3003', {
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 2000,
-    })
+    // Subscribe to realtime UPDATE changes on the Generation table
+    // Filter by userId so we only get events for this user's generations
+    const channel = supabase
+      .channel('generation-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'Generation',
+          filter: `userId=eq.${user.id}`,
+        },
+        (payload) => {
+          const updated = payload.new as Record<string, any>
+          const status = updated.status as string
+          const taskId = updated.taskId as string | null
+          const resultUrl = updated.resultUrl as string | null
 
-    socketRef.current = socket
+          if (!taskId) return
 
-    socket.on('connect', () => {
-      console.log('[WS] Connected to notification service')
-      // Register with userId
-      socket.emit('register', user.id)
-    })
+          console.log('[Realtime] Generation update received:', taskId, status)
 
-    socket.on('disconnect', () => {
-      console.log('[WS] Disconnected from notification service')
-    })
+          // Only process if this is the currently active task
+          if (taskId !== activeTaskId) return
 
-    socket.on('generation-update', (data: GenerationUpdate) => {
-      console.log('[WS] Received generation update:', data.taskId, data.status)
+          if (status === 'COMPLETED' && resultUrl) {
+            callbacksRef.current.onCompleted(taskId, resultUrl)
+            refreshState()
+          } else if (status === 'FAILED') {
+            callbacksRef.current.onFailed(
+              taskId,
+              'Generation Failed',
+              typeof resultUrl === 'string' && !resultUrl.startsWith('http') ? resultUrl : 'Something went wrong. Please try again.'
+            )
+            refreshState()
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[Realtime] Subscribed to Generation updates for user', user.id)
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[Realtime] Channel error')
+        } else if (status === 'TIMED_OUT') {
+          console.warn('[Realtime] Subscription timed out, retrying...')
+        }
+      })
 
-      // Only process if this is the active task
-      if (data.taskId !== activeTaskId) return
-
-      if (data.status === 'COMPLETED' && data.resultUrl) {
-        callbacksRef.current.onCompleted(data.taskId, data.resultUrl)
-        refreshState()
-      } else if (data.status === 'FAILED') {
-        callbacksRef.current.onFailed(
-          data.taskId,
-          data.errorTitle || 'Generation Failed',
-          data.errorMessage || 'Something went wrong. Please try again.'
-        )
-        refreshState()
-      }
-    })
+    channelRef.current = channel
 
     // Cleanup on unmount
     return () => {
-      socket.disconnect()
-      socketRef.current = null
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
     }
   }, [user?.id, activeTaskId, refreshState])
 
-  return { socket: socketRef }
+  return {}
 }
