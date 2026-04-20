@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore } from '@/store/app-store'
+import { useGenerationNotification } from '@/hooks/use-generation-notification'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -149,6 +150,45 @@ export function GeneratePage() {
 
   // Settings collapsed
   const [settingsOpen, setSettingsOpen] = useState(false)
+
+  // WebSocket notification for generation updates (callback-driven, no polling)
+  const handleCompleted = useCallback((tId: string, resultUrl: string) => {
+    if (tId !== taskId) return
+    setIsGenerating(false)
+    setTaskId(null)
+    toast.success('Generation complete!', {
+      description: 'Your creation is ready to view and download.',
+    })
+    setCurrentResult({
+      id: tId,
+      status: 'COMPLETED',
+      resultUrl,
+      prompt: '',
+      modelId: selectedModel,
+      type: genType,
+      aspectRatio,
+      createdAt: new Date().toISOString(),
+    })
+    // Refresh history
+    fetch('/api/generate/history?page=1&limit=4')
+      .then((r) => r.ok && r.json())
+      .then((d) => d?.success && setRecentGenerations(d.data?.items || []))
+      .catch(() => {})
+  }, [taskId, selectedModel, genType, aspectRatio])
+
+  const handleFailed = useCallback((tId: string, errorTitle: string, errorMessage: string) => {
+    if (tId !== taskId) return
+    setIsGenerating(false)
+    setTaskId(null)
+    toast.error(errorTitle, { description: errorMessage, duration: 6000 })
+    setGenerationError({ title: errorTitle, message: errorMessage })
+  }, [taskId])
+
+  useGenerationNotification({
+    activeTaskId: taskId,
+    onCompleted: handleCompleted,
+    onFailed: handleFailed,
+  })
 
 
 
