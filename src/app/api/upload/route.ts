@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
     }
 
     const imgbbKey = setting.value;
+    const urls: string[] = [];
     const uploadResults = [];
 
     for (const file of files) {
@@ -75,13 +76,19 @@ export async function POST(req: NextRequest) {
       }
 
       const data = await response.json();
+      const url = data.data.url;
+      urls.push(url);
       uploadResults.push({
-        url: data.data.url,
+        url,
         delete_url: data.data.delete_url,
       });
     }
 
-    return NextResponse.json({ images: uploadResults });
+    return NextResponse.json({
+      success: true,
+      data: { urls },
+      images: uploadResults,
+    });
   } catch (error) {
     console.error("Upload error:", error);
     return NextResponse.json(
