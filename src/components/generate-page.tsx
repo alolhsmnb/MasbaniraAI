@@ -41,6 +41,7 @@ interface Model {
   modelId: string
   name: string
   type: string
+  logoUrl?: string | null
   isActive: boolean
   supportsImageInput?: boolean
   pricing?: {
@@ -581,6 +582,11 @@ export function GeneratePage() {
                       {activeModels.map((model) => (
                         <SelectItem key={model.modelId} value={model.modelId}>
                           <div className="flex items-center gap-2">
+                            {model.logoUrl ? (
+                              <img src={model.logoUrl} alt={model.name} className="size-5 rounded object-cover" />
+                            ) : (
+                              <Sparkles className="size-4 text-emerald-400 shrink-0" />
+                            )}
                             <span>{model.name}</span>
                             <Badge variant="outline" className="text-xs ml-1">
                               {model.type}
