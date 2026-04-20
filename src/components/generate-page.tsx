@@ -146,9 +146,7 @@ export function GeneratePage() {
   // Show ads only if user has 0 paid credits
   const showAds = (credits?.paidCredits ?? 0) <= 0
 
-  // Settings collapsed
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const pollTimeoutsRef = useRef<NodeJS.Timeout[]>([])
+
 
   // Compute current cost based on model pricing and options
   const currentCost = useMemo(() => {
@@ -390,79 +388,6 @@ export function GeneratePage() {
     }
   }
 
-  // Polling logic
-  const pollTask = useCallback(
-    async (id: string) => {
-      try {
-        const res = await fetch(`/api/generate/${id}`)
-        if (res.ok) {
-          const data = await res.json()
-          if (data.success && data.data) {
-            const task = data.data
-            setCurrentResult(task)
-            if (task.status === 'COMPLETED') {
-              setIsGenerating(false)
-              setTaskId(null)
-              toast.success('Generation complete!', {
-                description: 'Your creation is ready to view and download.',
-              })
-              try {
-                const creditsRes = await fetch('/api/user/credits')
-                if (creditsRes.ok) {
-                  const creditsData = await creditsRes.json()
-                  if (creditsData.success) setCredits(creditsData.data)
-                }
-              } catch { /* silent */ }
-              try {
-                const histRes = await fetch('/api/generate/history?page=1&limit=4')
-                if (histRes.ok) {
-                  const histData = await histRes.json()
-                  if (histData.success) setRecentGenerations(histData.data?.items || [])
-                }
-              } catch { /* silent */ }
-              if (pollRef.current) clearInterval(pollRef.current)
-              return
-            }
-            if (task.status === 'FAILED') {
-              setIsGenerating(false)
-              setTaskId(null)
-              const errorTitle = (task as any).errorTitle || 'Generation Failed'
-              const errorMessage = (task as any).errorMessage || 'Something went wrong during generation. The content may be inappropriate or there was a server issue. Please try a different prompt.'
-              const wasRefunded = (task as any).refunded === true
-              toast.error(errorTitle, { description: errorMessage, duration: wasRefunded ? 6000 : 4000 })
-              setGenerationError({
-                title: errorTitle,
-                message: errorMessage,
-              })
-              // Refresh credits after refund
-              if (wasRefunded) {
-                try {
-                  const creditsRes = await fetch('/api/user/credits')
-                  if (creditsRes.ok) {
-                    const creditsData = await creditsRes.json()
-                    if (creditsData.success) setCredits(creditsData.data)
-                  }
-                } catch { /* silent */ }
-              }
-              if (pollRef.current) clearInterval(pollRef.current)
-              return
-            }
-          }
-        }
-      } catch { /* continue polling */ }
-    },
-    [setCredits]
-  )
-
-  useEffect(() => {
-    if (taskId && isGenerating) {
-      pollRef.current = setInterval(() => pollTask(taskId), 3000)
-      pollTask(taskId)
-    }
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
-    }
-  }, [taskId, isGenerating, pollTask])
 
   const handleDownload = (url: string, type: string) => {
     const ext = type === 'VIDEO' ? 'mp4' : 'png'
