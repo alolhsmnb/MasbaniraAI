@@ -43,6 +43,7 @@ interface Model {
   name: string
   type: string
   isActive: boolean
+  logoUrl?: string | null
 }
 
 interface Plan {
@@ -272,7 +273,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* Models Section */}
+      {/* Models Section - 3D Carousel */}
       <section className="py-20 px-4">
         <div className="max-w-7xl mx-auto">
           <motion.div
@@ -291,41 +292,42 @@ export function LandingPage() {
           </motion.div>
 
           {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-32 rounded-2xl" />
-              ))}
+            <div className="flex justify-center">
+              <Skeleton className="h-80 w-56 rounded-3xl" />
             </div>
           ) : models.length > 0 ? (
-            <motion.div
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6"
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: '-100px' }}
-              variants={staggerContainer}
-            >
-              {models
-                .filter((m) => m.isActive)
-                .map((model, i) => (
-                  <motion.div
-                    key={model.id}
-                    variants={fadeIn}
-                    custom={i}
-                    className="glass-card p-6 hover:glow-sm transition-all duration-300"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <Badge variant="secondary" className="text-xs">
-                        {model.type === 'IMAGE' ? 'Image' : 'Video'}
-                      </Badge>
-                      <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-xs">
-                        Active
+            <div className="carousel-scene h-[340px] sm:h-[400px] lg:h-[460px]">
+              <div
+                className="carousel-ring"
+                style={{ '--n': models.filter(m => m.isActive).length, '--ba': `calc(1turn / ${models.filter(m => m.isActive).length})` } as React.CSSProperties}
+              >
+                {models
+                  .filter((m) => m.isActive)
+                  .map((model, i) => (
+                    <div
+                      key={model.id}
+                      className="carousel-card glass-card flex flex-col items-center justify-center gap-3 p-4 sm:p-6"
+                      style={{ '--i': i } as React.CSSProperties}
+                    >
+                      {model.logoUrl ? (
+                        <img
+                          src={model.logoUrl}
+                          alt={model.name}
+                          className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl object-cover"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center">
+                          <Sparkles className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-400" />
+                        </div>
+                      )}
+                      <h3 className="text-sm sm:text-base font-semibold text-center leading-tight">{model.name}</h3>
+                      <Badge variant="secondary" className="text-[10px] sm:text-xs">
+                        {model.type === 'IMAGE' ? '🖼️ Image' : '🎬 Video'}
                       </Badge>
                     </div>
-                    <h3 className="text-lg font-semibold mb-1">{model.name}</h3>
-                    <p className="text-muted-foreground text-sm">Model ID: {model.modelId}</p>
-                  </motion.div>
-                ))}
-            </motion.div>
+                  ))}
+              </div>
+            </div>
           ) : (
             <motion.div
               initial={{ opacity: 0 }}
