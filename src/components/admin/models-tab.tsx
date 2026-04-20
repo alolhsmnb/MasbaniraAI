@@ -46,6 +46,8 @@ import {
   Save,
   Loader2,
   DollarSign,
+  ImageIcon,
+  X,
 } from 'lucide-react'
 
 export function ModelsTab() {
@@ -57,8 +59,12 @@ export function ModelsTab() {
     modelId: '',
     name: '',
     type: 'IMAGE',
+    logoUrl: '',
     isActive: true,
   })
+  const [editModel, setEditModel] = useState<any>(null)
+  const [editLogoUrl, setEditLogoUrl] = useState('')
+  const [editLogoSaving, setEditLogoSaving] = useState(false)
   const [pricingModel, setPricingModel] = useState<any>(null)
   const [pricingForm, setPricingForm] = useState<any>(null)
   const [pricingLoading, setPricingLoading] = useState(false)
@@ -97,13 +103,63 @@ export function ModelsTab() {
       if (res.ok) {
         toast.success('Model added successfully')
         setAddOpen(false)
-        setForm({ modelId: '', name: '', type: 'IMAGE', isActive: true })
+        setForm({ modelId: '', name: '', type: 'IMAGE', logoUrl: '', isActive: true })
         fetchModels()
       } else {
         toast.error('Failed to add model')
       }
     } catch {
       toast.error('Failed to add model')
+    }
+  }
+
+  const handleSaveLogo = async () => {
+    if (!editModel) return
+    setEditLogoSaving(true)
+    try {
+      const res = await fetch('/api/admin/models', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelId: editModel.modelId, logoUrl: editLogoUrl || null }),
+      })
+      if (res.ok) {
+        toast.success('Logo updated successfully')
+        setEditModel(null)
+        setEditLogoUrl('')
+        fetchModels()
+      } else {
+        toast.error('Failed to update logo')
+      }
+    } catch {
+      toast.error('Failed to update logo')
+    } finally {
+      setEditLogoSaving(false)
+    }
+  }
+
+  const handleUploadLogo = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file')
+      return
+    }
+    const formData = new FormData()
+    formData.append('images', file)
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.images?.[0]?.url) {
+          setEditLogoUrl(data.images[0].url)
+          toast.success('Image uploaded')
+        }
+      } else {
+        toast.error('Failed to upload image')
+      }
+    } catch {
+      toast.error('Failed to upload image')
     }
   }
 
@@ -245,6 +301,7 @@ export function ModelsTab() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Logo</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Model ID</TableHead>
                 <TableHead>Type</TableHead>
@@ -265,13 +322,30 @@ export function ModelsTab() {
                 ))
               ) : models.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     No models configured. Click &quot;Add Model&quot; to create one.
                   </TableCell>
                 </TableRow>
               ) : (
                 models.map((model) => (
                   <TableRow key={model.id}>
+                    <TableCell>
+                      {model.logoUrl ? (
+                        <img
+                          src={model.logoUrl}
+                          alt={model.name}
+                          className="size-8 rounded-lg object-cover"
+                          onClick={() => { setEditModel(model); setEditLogoUrl(model.logoUrl || '') }}
+                        />
+                      ) : (
+                        <div
+                          className="size-8 rounded-lg bg-white/10 border border-dashed border-white/20 flex items-center justify-center cursor-pointer hover:border-emerald-400/50 transition-colors"
+                          onClick={() => { setEditModel(model); setEditLogoUrl('') }}
+                        >
+                          <ImageIcon className="size-3.5 text-muted-foreground" />
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="font-medium">{model.name}</TableCell>
                     <TableCell className="text-sm text-muted-foreground font-mono">
                       {model.modelId}
@@ -295,6 +369,15 @@ export function ModelsTab() {
                           title="Edit Pricing"
                         >
                           <DollarSign className="size-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-blue-400 hover:text-blue-300"
+                          onClick={() => { setEditModel(model); setEditLogoUrl(model.logoUrl || '') }}
+                          title="Edit Logo"
+                        >
+                          <ImageIcon className="size-3.5" />
                         </Button>
                         <Button
                           variant="ghost"
@@ -483,6 +566,14 @@ export function ModelsTab() {
               />
             </div>
             <div className="space-y-2">
+              <Label>Logo URL (optional)</Label>
+              <Input
+                value={form.logoUrl}
+                onChange={(e) => setForm({ ...form, logoUrl: e.target.value })}
+                placeholder="https://example.com/logo.png"
+              />
+            </div>
+            <div className="space-y-2">
               <Label>Type</Label>
               <Select
                 value={form.type}
@@ -514,6 +605,86 @@ export function ModelsTab() {
                 className="bg-gradient-to-r from-emerald-500 to-teal-500"
               >
                 Add Model
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Logo Dialog */}
+      <Dialog open={!!editModel} onOpenChange={(open) => { if (!open) { setEditModel(null); setEditLogoUrl('') } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ImageIcon className="size-5 text-emerald-400" />
+              Edit Logo: {editModel?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Logo Preview */}
+            <div className="flex justify-center">
+              {editLogoUrl ? (
+                <div className="relative">
+                  <img
+                    src={editLogoUrl}
+                    alt="Logo preview"
+                    className="w-20 h-20 rounded-xl object-cover border border-white/10"
+                  />
+                  <button
+                    className="absolute -top-2 -right-2 size-6 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                    onClick={() => setEditLogoUrl('')}
+                  >
+                    <X className="size-3 text-white" />
+                  </button>
+                </div>
+              ) : (
+                <div className="w-20 h-20 rounded-xl bg-white/5 border border-dashed border-white/20 flex items-center justify-center">
+                  <ImageIcon className="size-8 text-muted-foreground" />
+                </div>
+              )}
+            </div>
+
+            {/* Upload Button */}
+            <div className="flex items-center gap-2">
+              <label className="flex-1 cursor-pointer">
+                <div className="flex items-center justify-center gap-2 h-10 rounded-lg border border-white/10 hover:border-emerald-400/50 hover:bg-emerald-500/5 transition-all text-sm text-muted-foreground hover:text-emerald-400">
+                  <ImageIcon className="size-4" />
+                  Upload Image
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) handleUploadLogo(file)
+                    e.target.value = ''
+                  }}
+                />
+              </label>
+            </div>
+
+            {/* URL Input */}
+            <div className="space-y-2">
+              <Label>Or enter URL</Label>
+              <Input
+                value={editLogoUrl}
+                onChange={(e) => setEditLogoUrl(e.target.value)}
+                placeholder="https://example.com/logo.png"
+              />
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button variant="outline" onClick={() => { setEditModel(null); setEditLogoUrl('') }}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveLogo}
+                disabled={editLogoSaving}
+                className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 gap-2"
+              >
+                {editLogoSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                Save Logo
               </Button>
             </DialogFooter>
           </div>

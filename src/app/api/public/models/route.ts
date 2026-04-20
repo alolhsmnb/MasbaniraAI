@@ -15,6 +15,7 @@ export async function GET() {
       modelId: model.modelId,
       name: model.name,
       type: model.type,
+      logoUrl: model.logoUrl || null,
       isActive: model.isActive,
       pricing: model.pricing
         ? JSON.parse(model.pricing.pricingJson)

@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     await requireAdmin(request)
 
     const body = await request.json()
-    const { modelId, name, type, isActive, sortOrder } = body || {}
+    const { modelId, name, type, logoUrl, isActive, sortOrder } = body || {}
 
     if (!modelId || !name) {
       return NextResponse.json(
@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
         modelId,
         name,
         type: type || 'IMAGE',
+        logoUrl: logoUrl || null,
         isActive: isActive !== false,
         sortOrder: sortOrder || 0,
       },
@@ -92,7 +93,7 @@ export async function PUT(request: NextRequest) {
     await requireAdmin(request)
 
     const body = await request.json()
-    const { modelId, name, type, isActive, sortOrder } = body || {}
+    const { modelId, name, type, logoUrl, isActive, sortOrder } = body || {}
 
     if (!modelId) {
       return NextResponse.json(
@@ -117,6 +118,7 @@ export async function PUT(request: NextRequest) {
       data: {
         ...(name !== undefined && { name }),
         ...(type !== undefined && { type }),
+        ...(logoUrl !== undefined && { logoUrl }),
         ...(isActive !== undefined && { isActive }),
         ...(sortOrder !== undefined && { sortOrder }),
       },
