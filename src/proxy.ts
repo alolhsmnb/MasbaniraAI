@@ -22,7 +22,7 @@ export function proxy(request: NextRequest) {
   const ext = fileName.split('.').pop()?.toLowerCase() || ''
 
   // Only handle known verification file extensions
-  if (!['txt', 'html', 'xml', 'json'].includes(ext)) {
+  if (!['txt', 'html', 'xml', 'json', 'js'].includes(ext)) {
     return NextResponse.next()
   }
 
