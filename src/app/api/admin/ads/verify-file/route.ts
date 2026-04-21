@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     const safeName = (fileName || file.name).replace(/[^a-zA-Z0-9._-]/g, '_')
     
     // Only allow specific extensions
-    const allowedExt = ['.html', '.txt', '.xml', '.json']
+    const allowedExt = ['.html', '.txt', '.xml', '.json', '.js']
     const ext = '.' + safeName.split('.').pop()?.toLowerCase()
     if (!allowedExt.includes(ext)) {
       return NextResponse.json(

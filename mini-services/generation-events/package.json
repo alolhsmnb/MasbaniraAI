@@ -1,0 +1,12 @@
+{
+  "name": "generation-events",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run index.ts"
+  },
+  "dependencies": {
+    "socket.io": "^4.8.3"
+  }
+}

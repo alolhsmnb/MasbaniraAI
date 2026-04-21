@@ -339,7 +339,7 @@ export function AdsAdminTab() {
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept=".html,.txt,.xml,.json"
+                      accept=".html,.txt,.xml,.json,.js"
                       onChange={(e) => {
                         const file = e.target.files?.[0] || null
                         setUploadFile(file)
@@ -351,7 +351,7 @@ export function AdsAdminTab() {
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Supported: .html, .txt, .xml, .json (max 100KB)
+                    Supported: .html, .txt, .xml, .json, .js (max 100KB)
                   </p>
                 </div>
                 <div className="space-y-2">
