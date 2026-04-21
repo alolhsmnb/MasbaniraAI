@@ -88,7 +88,7 @@ export async function getNextApiKey(): Promise<{ id: string; key: string; name: 
 /**
  * Check if an API error is retryable (insufficient credits, rate limit)
  */
-function isRetryableError(errorMsg: string): boolean {
+export function isRetryableError(errorMsg: string): boolean {
   const lower = errorMsg.toLowerCase()
   return (
     lower.includes('402') ||
@@ -440,20 +440,6 @@ export function isTaskFailed(data: TaskStatusResult): boolean {
   const failedStates = ['failed', 'failure', 'error', 'cancelled', 'canceled', 'aborted', 'abort', 'timeout', 'timedout']
 
   return failedStates.includes(state) || failedStates.includes(status)
-}
-
-/**
- * Check if an API error is retryable (temporary) so we should try the next key
- */
-export function isRetryableError(error: string): boolean {
-  const msg = error.toLowerCase()
-  // Rate limit, temporary server errors, key quota exceeded
-  const retryablePatterns = [
-    'rate limit', 'ratelimit', 'too many requests', 'quota', '429',
-    '500', '502', '503', '504', 'internal server error',
-    'key expired', 'key limit', 'concurrent', 'busy',
-  ]
-  return retryablePatterns.some(p => msg.includes(p))
 }
 
 /**
