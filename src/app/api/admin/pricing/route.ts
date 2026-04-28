@@ -140,6 +140,8 @@ export function getDefaultPricing(modelType: string, modelModelId: string) {
   const isVeo = modelModelId.startsWith('veo3')
   // Seedance has fixed settings, uses flat pricing
   const isSeedance = modelModelId === 'bytedance/seedance-2-fast'
+  // Kling models: pricing by duration only
+  const isKling = modelModelId.startsWith('kwaivgi/kling')
 
   if (modelType === 'IMAGE') {
     return {
@@ -169,6 +171,18 @@ export function getDefaultPricing(modelType: string, modelModelId: string) {
       tiers: {
         default: 10,
       },
+    }
+  }
+
+  if (isKling) {
+    // Kling: duration-based pricing (3-15 seconds)
+    const klingTiers: Record<string, number> = {}
+    for (let d = 3; d <= 15; d++) {
+      klingTiers[String(d)] = Math.max(1, Math.round(d * 1.5))
+    }
+    return {
+      format: 'duration',
+      tiers: klingTiers,
     }
   }
 

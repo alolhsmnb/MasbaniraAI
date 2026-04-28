@@ -223,6 +223,11 @@ export function GeneratePage() {
       }
       return 1
     }
+    if (format === 'duration') {
+      // Kling: pricing by duration only
+      const dur = isKlingModel ? String(klingDuration) : String(videoDuration)
+      return Math.max(1, parseInt(String(tiers[dur])) || 1)
+    }
     if (format === 'frames') {
       return Math.max(1, parseInt(String(tiers[soraFrames])) || 1)
     }
@@ -230,7 +235,7 @@ export function GeneratePage() {
       return Math.max(1, parseInt(String(tiers.default)) || 1)
     }
     return 1
-  }, [models, selectedModel, imageSize, videoDuration, videoResolution, soraFrames])
+  }, [models, selectedModel, imageSize, videoDuration, videoResolution, soraFrames, isKlingModel, klingDuration])
 
   // Check if current model supports/requires image input
   const isSeedanceModel = SEEDANCE_MODELS.includes(selectedModel)

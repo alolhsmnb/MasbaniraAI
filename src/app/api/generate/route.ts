@@ -458,6 +458,12 @@ function calculateCost(
       return defaultCost
     }
 
+    if (format === 'duration') {
+      // Kling models: pricing by duration only
+      const dur = String(options.duration || 5)
+      return Math.max(1, parseInt(String(tiers[dur])) || defaultCost)
+    }
+
     if (format === 'frames') {
       // Sora2 models: key is frame count
       const frames = options.nFrames || '10'
