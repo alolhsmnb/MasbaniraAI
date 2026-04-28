@@ -6,7 +6,7 @@ import { extractResultUrl } from '@/lib/kie-api'
 // ============================================================
 // WaveSpeed HMAC-SHA256 webhook signature verification
 // ============================================================
-function verifyWaveSpeedSignature(rawBody: string, headers: Headers, secret: string): boolean {
+function verifyWaveSpeedSignature(rawBuffer: Buffer, headers: Headers, secret: string): boolean {
   try {
     const webhookId = headers.get('webhook-id')
     const timestamp = headers.get('webhook-timestamp')
@@ -30,36 +30,37 @@ function verifyWaveSpeedSignature(rawBody: string, headers: Headers, secret: str
 
     const key = secret.startsWith('whsec_') ? secret.slice(6) : secret
 
-    // Try multiple body variants to find which one matches
-    const variants = [
-      { label: 'original', body: rawBody },
-      { label: 'trimmed', body: rawBody.trim() },
-      { label: 'trimmedEnd', body: rawBody.trimEnd() },
-      { label: 'trimmedStart', body: rawBody.trimStart() },
-      { label: 'noNewlineEnd', body: rawBody.replace(/\n+$/, '') },
-      { label: 'normalized', body: rawBody.replace(/\r\n/g, '\n').trim() },
-    ]
+    // Use raw bytes directly — no string decoding that might normalize characters
+    const prefix = Buffer.from(`${webhookId}.${timestamp}.`)
+    const signedContent = Buffer.concat([prefix, rawBuffer])
 
-    for (const variant of variants) {
-      const signedContent = `${webhookId}.${timestamp}.${variant.body}`
-      const expected = crypto
-        .createHmac('sha256', key)
-        .update(signedContent)
-        .digest('hex')
+    const expectedSignature = crypto
+      .createHmac('sha256', key)
+      .update(signedContent)
+      .digest('hex')
 
-      if (expected === receivedSignature) {
-        console.log(`[Webhook/SigDebug] ✅ MATCH with variant: ${variant.label} (body length: ${variant.body.length})`)
-        return true
-      }
+    const match = expectedSignature === receivedSignature
+
+    if (match) {
+      console.log(`[Webhook/SigDebug] ✅ Signature verified (buffer mode, ${rawBuffer.length} bytes)`)
+    } else {
+      // Debug: also try string version for comparison
+      const stringBody = rawBuffer.toString('utf-8')
+      const stringContent = `${webhookId}.${timestamp}.${stringBody}`
+      const stringExpected = crypto.createHmac('sha256', key).update(stringContent).digest('hex')
+      console.log(`[Webhook/SigDebug] ❌ Buffer mode failed`)
+      console.log(`[Webhook/SigDebug] bufferExpected=${expectedSignature}`)
+      console.log(`[Webhook/SigDebug] stringExpected=${stringExpected}`)
+      console.log(`[Webhook/SigDebug] received=${receivedSignature}`)
+      console.log(`[Webhook/SigDebug] buffer===string? ${expectedSignature === stringExpected}`)
+      // Try trimmed buffer
+      const trimmedBuf = Buffer.from(stringBody.trim())
+      const trimmedContent = Buffer.concat([prefix, trimmedBuf])
+      const trimmedExpected = crypto.createHmac('sha256', key).update(trimmedContent).digest('hex')
+      console.log(`[Webhook/SigDebug] trimmedExpected=${trimmedExpected}, match? ${trimmedExpected === receivedSignature}`)
     }
 
-    // Log debug info for debugging
-    console.log(`[Webhook/SigDebug] ❌ No variant matched`)
-    console.log(`[Webhook/SigDebug] rawBody length=${rawBody.length}, last30="${rawBody.slice(-30)}"`)
-    console.log(`[Webhook/SigDebug] trimmed length=${rawBody.trim().length}`)
-    console.log(`[Webhook/SigDebug] received sig=${receivedSignature}`)
-
-    return false
+    return match
   } catch (err) {
     console.error('[Webhook/SigDebug] Verification error:', err)
     return false
@@ -264,7 +265,9 @@ export async function GET() {
 // ============================================================
 export async function POST(request: NextRequest) {
   try {
-    const rawBody = await request.text()
+    // Read raw bytes first for signature verification
+    const rawBuffer = Buffer.from(await request.arrayBuffer())
+    const rawBody = rawBuffer.toString('utf-8')
     console.log('[Webhook] === RECEIVED ===', rawBody.substring(0, 500))
 
     let payload: Record<string, unknown>
@@ -285,7 +288,7 @@ export async function POST(request: NextRequest) {
       try {
         const setting = await db.siteSetting.findUnique({ where: { key: 'wavespeed_webhook_secret' } })
         if (setting?.value) {
-          const valid = verifyWaveSpeedSignature(rawBody, request.headers, setting.value)
+          const valid = verifyWaveSpeedSignature(rawBuffer, request.headers, setting.value)
           if (!valid) {
             console.warn('[Webhook/WaveSpeed] ⚠️ Signature mismatch (processing anyway)')
           } else {
