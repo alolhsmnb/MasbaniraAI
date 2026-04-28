@@ -39,7 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Trash2, ShieldCheck, Loader2 } from 'lucide-react'
+import { Plus, Trash2, ShieldCheck, Loader2, KeyRound } from 'lucide-react'
 
 export function ApiKeysTab() {
   const [keys, setKeys] = useState<any[]>([])
@@ -211,18 +211,18 @@ export function ApiKeysTab() {
                       <div className="flex items-center justify-end gap-1">
                         {key.provider === 'WAVESPEED' && (
                           <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8 text-amber-400 hover:text-amber-300"
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5 text-amber-500 border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-400 h-7 px-2 text-xs"
                             onClick={() => handleFetchSecret(key.id)}
                             disabled={fetchingSecretId === key.id}
-                            title="Fetch Webhook Secret"
                           >
                             {fetchingSecretId === key.id ? (
                               <Loader2 className="size-3.5 animate-spin" />
                             ) : (
-                              <ShieldCheck className="size-3.5" />
+                              <KeyRound className="size-3.5" />
                             )}
+                            {fetchingSecretId === key.id ? 'Fetching...' : 'Webhook Secret'}
                           </Button>
                         )}
                         <Button
