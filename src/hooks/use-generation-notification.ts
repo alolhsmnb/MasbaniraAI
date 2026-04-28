@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback } from 'react'
 import { useAppStore } from '@/store/app-store'
-import { supabase } from '@/lib/supabase'
+import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
 interface UseGenerationNotificationOptions {
@@ -38,6 +38,13 @@ export function useGenerationNotification({
 
   useEffect(() => {
     if (!user?.id) return
+    if (!isSupabaseConfigured || !supabase) {
+      // Supabase not configured — skip realtime, use polling fallback
+      if (activeTaskId) {
+        console.log('[Realtime] Supabase not configured, skipping realtime subscription')
+      }
+      return
+    }
 
     // Subscribe to realtime UPDATE changes on the Generation table
     // Filter by userId so we only get events for this user's generations
