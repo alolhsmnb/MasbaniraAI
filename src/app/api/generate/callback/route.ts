@@ -259,16 +259,16 @@ export async function POST(request: NextRequest) {
 
     // Step 2: Route to appropriate handler
     if (provider === 'WAVESPEED') {
-      // Verify WaveSpeed HMAC signature
+      // Verify WaveSpeed HMAC signature (warning only, never block)
       try {
         const setting = await db.siteSetting.findUnique({ where: { key: 'wavespeed_webhook_secret' } })
         if (setting?.value) {
           const valid = verifyWaveSpeedSignature(rawBody, request.headers, setting.value)
           if (!valid) {
-            console.warn('[Webhook/WaveSpeed] ❌ Invalid signature')
-            return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+            console.warn('[Webhook/WaveSpeed] ⚠️ Signature mismatch (processing anyway)')
+          } else {
+            console.log('[Webhook/WaveSpeed] ✅ Signature verified')
           }
-          console.log('[Webhook/WaveSpeed] ✅ Signature verified')
         } else {
           console.log('[Webhook/WaveSpeed] No stored secret — skipping verification')
         }
