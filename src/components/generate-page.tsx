@@ -89,6 +89,11 @@ const VEO_MODELS = ['veo3', 'veo3_fast', 'veo3_lite']
 const VEO_ASPECT_RATIOS = ['16:9', '9:16', 'Auto']
 const VEO_RESOLUTIONS = ['720p', '1080p']
 
+// Kling models (WaveSpeed)
+const KLING_MODELS = ['kwaivgi/kling-v3.0-std/text-to-video', 'kwaivgi/kling-v3.0-std/image-to-video']
+const KLING_ASPECT_RATIOS = ['16:9', '9:16', '1:1']
+const KLING_SHOT_TYPES = ['intelligent', 'customize']
+
 export function GeneratePage() {
   const { credits, setCredits } = useAppStore()
   const [models, setModels] = useState<Model[]>([])
@@ -109,6 +114,12 @@ export function GeneratePage() {
   const [removeWatermark, setRemoveWatermark] = useState(true)
   const [enableTranslation, setEnableTranslation] = useState(true)
   const [veoResolution, setVeoResolution] = useState('720p')
+
+  // Kling state
+  const [klingDuration, setKlingDuration] = useState(5)
+  const [klingCfgScale, setKlingCfgScale] = useState(0.5)
+  const [klingSound, setKlingSound] = useState(false)
+  const [klingShotType, setKlingShotType] = useState('intelligent')
 
   // Seedance state
   const [seedanceDuration, setSeedanceDuration] = useState(5)
@@ -223,20 +234,24 @@ export function GeneratePage() {
 
   // Check if current model supports/requires image input
   const isSeedanceModel = SEEDANCE_MODELS.includes(selectedModel)
-  const currentModelSupportsImage = IMAGE_INPUT_MODELS.includes(selectedModel) || IMAGE_REQUIRED_MODELS.includes(selectedModel) || isSeedanceModel || selectedModel.startsWith('veo3')
-  const currentModelRequiresImage = IMAGE_REQUIRED_MODELS.includes(selectedModel)
-  const isVideoModel = VIDEO_MODELS.includes(selectedModel) || selectedModel.startsWith('veo3')
-  const currentModelIsImageToVideo = selectedModel === 'grok-imagine/image-to-video'
+  const isKlingModel = KLING_MODELS.includes(selectedModel)
+  const currentModelSupportsImage = IMAGE_INPUT_MODELS.includes(selectedModel) || IMAGE_REQUIRED_MODELS.includes(selectedModel) || isSeedanceModel || isKlingModel || selectedModel.startsWith('veo3')
+  const currentModelRequiresImage = IMAGE_REQUIRED_MODELS.includes(selectedModel) || selectedModel === 'kwaivgi/kling-v3.0-std/image-to-video'
+  const isVideoModel = VIDEO_MODELS.includes(selectedModel) || selectedModel.startsWith('veo3') || isKlingModel
+  const currentModelIsImageToVideo = selectedModel === 'grok-imagine/image-to-video' || selectedModel === 'kwaivgi/kling-v3.0-std/image-to-video'
   const isSora2Model = SORA2_MODELS.includes(selectedModel)
   const isVeoModel = selectedModel.startsWith('veo3')
 
-  // Reset aspect ratio when switching to Veo/Seedance model
+  // Reset aspect ratio when switching to Veo/Seedance/Kling model
   const handleModelChange = useCallback((modelId: string) => {
     setSelectedModel(modelId)
     if (modelId.startsWith('veo3')) {
       setAspectRatio('16:9')
     }
     if (modelId === 'bytedance/seedance-2-fast') {
+      setAspectRatio('16:9')
+    }
+    if (KLING_MODELS.includes(modelId)) {
       setAspectRatio('16:9')
     }
   }, [])
@@ -494,24 +509,32 @@ export function GeneratePage() {
         seedanceWebSearch,
       } : {}
 
+      // Build Kling-specific payload
+      const klingPayload = isKlingModel ? {
+        klingCfgScale,
+        klingSound,
+        klingShotType,
+      } : {}
+
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           modelId: selectedModel,
           prompt: prompt.trim() || undefined,
-          aspectRatio: isVeoModel ? (aspectRatio || '16:9') : isSora2Model ? (aspectRatio === 'portrait' || aspectRatio === 'landscape' ? aspectRatio : 'landscape') : isSeedanceModel ? (aspectRatio || '16:9') : aspectRatio,
+          aspectRatio: isVeoModel ? (aspectRatio || '16:9') : isSora2Model ? (aspectRatio === 'portrait' || aspectRatio === 'landscape' ? aspectRatio : 'landscape') : isSeedanceModel ? (aspectRatio || '16:9') : isKlingModel ? (aspectRatio || '16:9') : aspectRatio,
           imageSize: isVeoModel ? veoResolution : (isSeedanceModel ? seedanceResolution : (isVideoModel && !isSora2Model ? videoResolution : (imageSize === 'Auto' ? 'AUTO' : imageSize))),
           rotation: parseInt(rotation),
           type: isVideoModel ? 'VIDEO' : genType,
           imageInput: allImageUrls.length > 0 ? allImageUrls : undefined,
           outputFormat: !isVideoModel && currentModelSupportsImage ? outputFormat : undefined,
-          mode: isVideoModel && !isSora2Model && !isVeoModel && !isSeedanceModel ? videoMode : undefined,
-          duration: isSeedanceModel ? seedanceDuration : (isVideoModel && !isSora2Model && !isVeoModel ? videoDuration : undefined),
+          mode: isVideoModel && !isSora2Model && !isVeoModel && !isSeedanceModel && !isKlingModel ? videoMode : undefined,
+          duration: isSeedanceModel ? seedanceDuration : isKlingModel ? klingDuration : (isVideoModel && !isSora2Model && !isVeoModel ? videoDuration : undefined),
           nFrames: isSora2Model ? soraFrames : undefined,
           removeWatermark: isSora2Model ? removeWatermark : undefined,
           enableTranslation: isVeoModel ? enableTranslation : undefined,
           ...seedancePayload,
+          ...klingPayload,
         }),
       })
 
@@ -913,8 +936,8 @@ export function GeneratePage() {
                         className="overflow-hidden"
                       >
                         <div className="px-3 pb-3 space-y-3">
-                          {/* Video Mode (Grok only, not Seedance) */}
-                          {isVideoModel && !isSora2Model && !isSeedanceModel && (
+                          {/* Video Mode (Grok only, not Seedance/Kling) */}
+                          {isVideoModel && !isSora2Model && !isSeedanceModel && !isKlingModel && (
                             <div className="space-y-2">
                               <Label className="text-xs text-muted-foreground">Motion Style</Label>
                               <div className="grid grid-cols-3 gap-2">
@@ -937,8 +960,8 @@ export function GeneratePage() {
                               )}
                             </div>
                           )}
-                          {/* Video Duration (Grok only, not Seedance) */}
-                          {isVideoModel && !isSora2Model && !isVeoModel && !isSeedanceModel && (
+                          {/* Video Duration (Grok only, not Seedance/Kling) */}
+                          {isVideoModel && !isSora2Model && !isVeoModel && !isSeedanceModel && !isKlingModel && (
                             <div className="space-y-2">
                               <div className="flex items-center justify-between">
                                 <Label className="text-xs text-muted-foreground">Duration</Label>
@@ -957,6 +980,92 @@ export function GeneratePage() {
                                 <span>6s</span>
                                 <span>30s</span>
                               </div>
+                            </div>
+                          )}
+                          {/* Kling: Duration (3-15s) */}
+                          {isKlingModel && (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-xs text-muted-foreground">Duration</Label>
+                                <span className="text-xs font-medium text-emerald-400">{klingDuration}s</span>
+                              </div>
+                              <input
+                                type="range"
+                                min={3}
+                                max={15}
+                                step={1}
+                                value={klingDuration}
+                                onChange={(e) => setKlingDuration(parseInt(e.target.value))}
+                                className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-emerald-500"
+                              />
+                              <div className="flex justify-between text-[10px] text-muted-foreground">
+                                <span>3s</span>
+                                <span>15s</span>
+                              </div>
+                            </div>
+                          )}
+                          {/* Kling: Shot Type */}
+                          {isKlingModel && (
+                            <div className="space-y-2">
+                              <Label className="text-xs text-muted-foreground">Shot Type</Label>
+                              <div className="grid grid-cols-2 gap-2">
+                                {KLING_SHOT_TYPES.map((st) => (
+                                  <button
+                                    key={st}
+                                    onClick={() => setKlingShotType(st)}
+                                    className={`px-3 py-2 rounded-lg text-xs font-medium capitalize transition-all ${
+                                      klingShotType === st
+                                        ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/20'
+                                        : 'bg-white/5 border border-white/10 text-muted-foreground hover:border-emerald-500/30 hover:text-foreground'
+                                    }`}
+                                  >
+                                    {st === 'intelligent' ? '🧠 Intelligent' : '🎨 Customize'}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {/* Kling: CFG Scale */}
+                          {isKlingModel && (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-xs text-muted-foreground">CFG Scale</Label>
+                                <span className="text-xs font-medium text-emerald-400">{klingCfgScale}</span>
+                              </div>
+                              <input
+                                type="range"
+                                min={0}
+                                max={1}
+                                step={0.1}
+                                value={klingCfgScale}
+                                onChange={(e) => setKlingCfgScale(parseFloat(e.target.value))}
+                                className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer accent-emerald-500"
+                              />
+                              <div className="flex justify-between text-[10px] text-muted-foreground">
+                                <span>0 (more creative)</span>
+                                <span>1 (strict prompt)</span>
+                              </div>
+                            </div>
+                          )}
+                          {/* Kling: Sound Toggle */}
+                          {isKlingModel && (
+                            <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
+                              <div>
+                                <span className="text-xs text-muted-foreground block">Sound</span>
+                                <span className="text-[10px] text-muted-foreground/60">Generate audio with video</span>
+                              </div>
+                              <button
+                                onClick={() => setKlingSound(!klingSound)}
+                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                                  klingSound ? 'bg-emerald-500' : 'bg-white/20'
+                                }`}
+                              >
+                                <span
+                                  className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
+                                    klingSound ? 'translate-x-4' : 'translate-x-0.5'
+                                  }`}
+                                />
+                              </button>
                             </div>
                           )}
                           {/* Sora2: Frames */}
@@ -1193,7 +1302,7 @@ export function GeneratePage() {
                                 )}
                               </div>
                             </div>
-                          ) : isVideoModel && !isVeoModel ? (
+                          ) : isVideoModel && !isVeoModel && !isKlingModel ? (
                             <div className="space-y-2">
                               <Label className="text-xs text-muted-foreground">Resolution</Label>
                               <Select value={videoResolution} onValueChange={(val) => setVideoResolution(val)}>
@@ -1233,6 +1342,7 @@ export function GeneratePage() {
                                 isVeoModel ? (aspectRatio || '16:9') :
                                 isSora2Model ? (aspectRatio === 'portrait' || aspectRatio === 'landscape' ? aspectRatio : 'landscape') :
                                 isSeedanceModel ? (aspectRatio || '16:9') :
+                                isKlingModel ? (aspectRatio || '16:9') :
                                 aspectRatio
                               }
                               onValueChange={(val) => setAspectRatio(val)}
@@ -1243,10 +1353,10 @@ export function GeneratePage() {
                               <SelectContent>
                                 {(isVeoModel
                                   ? VEO_ASPECT_RATIOS
-                                  : isSora2Model ? SORA2_ASPECT_RATIOS : isSeedanceModel ? SEEDANCE_ASPECT_RATIOS : ASPECT_RATIOS
+                                  : isSora2Model ? SORA2_ASPECT_RATIOS : isSeedanceModel ? SEEDANCE_ASPECT_RATIOS : isKlingModel ? KLING_ASPECT_RATIOS : ASPECT_RATIOS
                                 ).map((ratio) => (
                                   <SelectItem key={ratio} value={ratio}>
-                                    {ratio === 'portrait' ? '📱 Portrait' : ratio === 'landscape' ? '🖥️ Landscape' : ratio === 'Auto' ? '🔄 Auto' : ratio === 'adaptive' ? '🔄 Adaptive' : ratio}
+                                    {ratio === 'portrait' ? '📱 Portrait' : ratio === 'landscape' ? '🖥️ Landscape' : ratio === 'Auto' ? '🔄 Auto' : ratio === 'adaptive' ? '🔄 Adaptive' : ratio === '16:9' ? '🖥️ 16:9 Landscape' : ratio === '9:16' ? '📱 9:16 Portrait' : ratio === '1:1' ? '⬜ 1:1 Square' : ratio}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
