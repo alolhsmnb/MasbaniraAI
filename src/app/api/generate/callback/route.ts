@@ -28,39 +28,49 @@ function verifyWaveSpeedSignature(rawBuffer: Buffer, headers: Headers, secret: s
       return false
     }
 
-    const key = secret.startsWith('whsec_') ? secret.slice(6) : secret
-
     // Use raw bytes directly — no string decoding that might normalize characters
     const prefix = Buffer.from(`${webhookId}.${timestamp}.`)
     const signedContent = Buffer.concat([prefix, rawBuffer])
 
-    const expectedSignature = crypto
-      .createHmac('sha256', key)
+    // Try BOTH: with and without whsec_ prefix
+    const keyWithPrefix = secret
+    const keyWithoutPrefix = secret.startsWith('whsec_') ? secret.slice(6) : `whsec_${secret}`
+
+    const expectedWithPrefix = crypto
+      .createHmac('sha256', keyWithPrefix)
       .update(signedContent)
       .digest('hex')
 
-    const match = expectedSignature === receivedSignature
+    const expectedWithoutPrefix = crypto
+      .createHmac('sha256', keyWithoutPrefix)
+      .update(signedContent)
+      .digest('hex')
 
-    if (match) {
-      console.log(`[Webhook/SigDebug] ✅ Signature verified (buffer mode, ${rawBuffer.length} bytes)`)
-    } else {
-      // Debug: also try string version for comparison
-      const stringBody = rawBuffer.toString('utf-8')
-      const stringContent = `${webhookId}.${timestamp}.${stringBody}`
-      const stringExpected = crypto.createHmac('sha256', key).update(stringContent).digest('hex')
-      console.log(`[Webhook/SigDebug] ❌ Buffer mode failed`)
-      console.log(`[Webhook/SigDebug] bufferExpected=${expectedSignature}`)
-      console.log(`[Webhook/SigDebug] stringExpected=${stringExpected}`)
-      console.log(`[Webhook/SigDebug] received=${receivedSignature}`)
-      console.log(`[Webhook/SigDebug] buffer===string? ${expectedSignature === stringExpected}`)
-      // Try trimmed buffer
-      const trimmedBuf = Buffer.from(stringBody.trim())
-      const trimmedContent = Buffer.concat([prefix, trimmedBuf])
-      const trimmedExpected = crypto.createHmac('sha256', key).update(trimmedContent).digest('hex')
-      console.log(`[Webhook/SigDebug] trimmedExpected=${trimmedExpected}, match? ${trimmedExpected === receivedSignature}`)
+    console.log(`[Webhook/SigDebug] received=${receivedSignature}`)
+    console.log(`[Webhook/SigDebug] withPrefix(full secret)=${expectedWithPrefix}`)
+    console.log(`[Webhook/SigDebug] withoutPrefix(stripped whsec_)=${expectedWithoutPrefix}`)
+    console.log(`[Webhook/SigDebug] stored secret="${secret.substring(0, 15)}...${secret.substring(secret.length - 5)}"`)
+
+    if (expectedWithPrefix === receivedSignature) {
+      console.log(`[Webhook/SigDebug] ✅ MATCH using full secret (WITH whsec_ prefix)`)
+      return true
     }
 
-    return match
+    if (expectedWithoutPrefix === receivedSignature) {
+      console.log(`[Webhook/SigDebug] ✅ MATCH using secret without whsec_ prefix`)
+      return true
+    }
+
+    // Also try raw string body
+    const stringBody = rawBuffer.toString('utf-8')
+    const stringContent = `${webhookId}.${timestamp}.${stringBody}`
+    const expectedString = crypto.createHmac('sha256', keyWithoutPrefix).update(stringContent).digest('hex')
+    const expectedStringFull = crypto.createHmac('sha256', keyWithPrefix).update(stringContent).digest('hex')
+    console.log(`[Webhook/SigDebug] stringMode stripped=${expectedString} match?${expectedString === receivedSignature}`)
+    console.log(`[Webhook/SigDebug] stringMode full=${expectedStringFull} match?${expectedStringFull === receivedSignature}`)
+
+    console.log(`[Webhook/SigDebug] ❌ No key variant matched`)
+    return false
   } catch (err) {
     console.error('[Webhook/SigDebug] Verification error:', err)
     return false
