@@ -62,6 +62,7 @@ export function ModelsTab() {
     type: 'IMAGE',
     logoUrl: '',
     isActive: true,
+    provider: 'KIE',
   })
   const [editModel, setEditModel] = useState<any>(null)
   const [editLogoUrl, setEditLogoUrl] = useState('')
@@ -104,7 +105,7 @@ export function ModelsTab() {
       if (res.ok) {
         toast.success('Model added successfully')
         setAddOpen(false)
-        setForm({ modelId: '', name: '', type: 'IMAGE', logoUrl: '', isActive: true })
+        setForm({ modelId: '', name: '', type: 'IMAGE', logoUrl: '', isActive: true, provider: 'KIE' })
         fetchModels()
       } else {
         toast.error('Failed to add model')
@@ -333,6 +334,7 @@ export function ModelsTab() {
                 <TableHead>Logo</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Model ID</TableHead>
+                <TableHead>Provider</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Active</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -342,7 +344,7 @@ export function ModelsTab() {
               {loading ? (
                 Array.from({ length: 3 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 5 }).map((_, j) => (
+                    {Array.from({ length: 6 }).map((_, j) => (
                       <TableCell key={j}>
                         <Skeleton className="h-4 w-20" />
                       </TableCell>
@@ -351,7 +353,7 @@ export function ModelsTab() {
                 ))
               ) : models.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     No models configured. Click &quot;Add Model&quot; to create one.
                   </TableCell>
                 </TableRow>
@@ -378,6 +380,11 @@ export function ModelsTab() {
                     <TableCell className="font-medium">{model.name}</TableCell>
                     <TableCell className="text-sm text-muted-foreground font-mono">
                       {model.modelId}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={model.provider === 'WAVESPEED' ? 'border-emerald-500/50 text-emerald-400' : ''}>
+                        {model.provider === 'WAVESPEED' ? 'WaveSpeed' : 'KIE.AI'}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">{model.type}</Badge>
@@ -701,6 +708,21 @@ export function ModelsTab() {
                 onChange={(e) => setForm({ ...form, logoUrl: e.target.value })}
                 placeholder="https://example.com/logo.png"
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Provider</Label>
+              <Select
+                value={form.provider}
+                onValueChange={(v) => setForm({ ...form, provider: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="KIE">KIE.AI</SelectItem>
+                  <SelectItem value="WAVESPEED">WaveSpeed.AI</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label>Type</Label>
