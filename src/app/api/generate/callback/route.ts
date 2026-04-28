@@ -12,10 +12,6 @@ function verifyWaveSpeedSignature(rawBody: string, headers: Headers, secret: str
     const timestamp = headers.get('webhook-timestamp')
     const signatureHeader = headers.get('webhook-signature')
 
-    console.log(`[Webhook/SigDebug] webhook-id=${webhookId}, timestamp=${timestamp}, signature=${signatureHeader?.substring(0, 20)}...`)
-    console.log(`[Webhook/SigDebug] rawBody length=${rawBody.length}, first80=${rawBody.substring(0, 80)}`)
-    console.log(`[Webhook/SigDebug] secret length=${secret.length}, secret prefix=${secret.substring(0, 10)}...`)
-
     if (!webhookId || !timestamp || !signatureHeader) {
       console.log('[Webhook/SigDebug] Missing required headers')
       return false
@@ -27,27 +23,43 @@ function verifyWaveSpeedSignature(rawBody: string, headers: Headers, secret: str
       return false
     }
 
-    const signedContent = `${webhookId}.${timestamp}.${rawBody}`
-    const key = secret.startsWith('whsec_') ? secret.slice(6) : secret
-    const expectedSignature = crypto
-      .createHmac('sha256', key)
-      .update(signedContent)
-      .digest('hex')
-
-    console.log(`[Webhook/SigDebug] signedContent=${signedContent.substring(0, 80)}...`)
-    console.log(`[Webhook/SigDebug] expected=${expectedSignature}`)
-    console.log(`[Webhook/SigDebug] received=${receivedSignature}`)
-    console.log(`[Webhook/SigDebug] match=${expectedSignature === receivedSignature}`)
-
     if (Math.abs(Date.now() / 1000 - parseInt(timestamp)) > 300) {
       console.warn('[Webhook/SigDebug] Timestamp too old')
       return false
     }
 
-    return crypto.timingSafeEqual(
-      Buffer.from(expectedSignature),
-      Buffer.from(receivedSignature)
-    )
+    const key = secret.startsWith('whsec_') ? secret.slice(6) : secret
+
+    // Try multiple body variants to find which one matches
+    const variants = [
+      { label: 'original', body: rawBody },
+      { label: 'trimmed', body: rawBody.trim() },
+      { label: 'trimmedEnd', body: rawBody.trimEnd() },
+      { label: 'trimmedStart', body: rawBody.trimStart() },
+      { label: 'noNewlineEnd', body: rawBody.replace(/\n+$/, '') },
+      { label: 'normalized', body: rawBody.replace(/\r\n/g, '\n').trim() },
+    ]
+
+    for (const variant of variants) {
+      const signedContent = `${webhookId}.${timestamp}.${variant.body}`
+      const expected = crypto
+        .createHmac('sha256', key)
+        .update(signedContent)
+        .digest('hex')
+
+      if (expected === receivedSignature) {
+        console.log(`[Webhook/SigDebug] ✅ MATCH with variant: ${variant.label} (body length: ${variant.body.length})`)
+        return true
+      }
+    }
+
+    // Log debug info for debugging
+    console.log(`[Webhook/SigDebug] ❌ No variant matched`)
+    console.log(`[Webhook/SigDebug] rawBody length=${rawBody.length}, last30="${rawBody.slice(-30)}"`)
+    console.log(`[Webhook/SigDebug] trimmed length=${rawBody.trim().length}`)
+    console.log(`[Webhook/SigDebug] received sig=${receivedSignature}`)
+
+    return false
   } catch (err) {
     console.error('[Webhook/SigDebug] Verification error:', err)
     return false
