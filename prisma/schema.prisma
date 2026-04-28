@@ -30,6 +30,7 @@ model ApiKey {
   id         String    @id @default(cuid())
   key        String    @unique
   name       String?
+  provider   String    @default("KIE")
   usageCount Int       @default(0)
   isActive   Boolean   @default(true)
   lastUsedAt String?

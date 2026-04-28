@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
         id: true,
         key: true,
         name: true,
+        provider: true,
         usageCount: true,
         isActive: true,
         lastUsedAt: true,
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
     await requireAdmin(request)
 
     const body = await request.json()
-    const { key, name } = body || {}
+    const { key, name, provider } = body || {}
 
     if (!key || !key.trim()) {
       return NextResponse.json(
@@ -85,6 +86,7 @@ export async function POST(request: NextRequest) {
       data: {
         key: trimmedKey,
         name: name || null,
+        provider: provider || 'KIE',
       },
     })
 
