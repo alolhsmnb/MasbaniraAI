@@ -203,6 +203,7 @@ export function ModelsTab() {
     if (model.type === 'IMAGE') return 'resolution'
     if (model.modelId.startsWith('sora-2')) return 'frames'
     if (model.modelId.startsWith('veo3') || model.modelId === 'bytedance/seedance-2-fast') return 'flat'
+    if (model.modelId.startsWith('kwaivgi/kling')) return 'duration'
     return 'duration_resolution'
   }
 
@@ -497,6 +498,41 @@ export function ModelsTab() {
                         />
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {getPricingFormType(pricingModel) === 'duration' && (
+                /* Kling model - Duration-based pricing */
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Credits per duration (seconds)</p>
+                  <div className="glass-card overflow-hidden">
+                    <div className="max-h-64 overflow-y-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-24">Duration</TableHead>
+                            <TableHead className="text-center">Credits</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {Object.entries(pricingForm.tiers).map(([duration, value]: [string, any]) => (
+                            <TableRow key={duration}>
+                              <TableCell className="font-medium">{duration}s</TableCell>
+                              <TableCell className="text-center">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={value || 0}
+                                  onChange={(e) => updateTierValue(duration, null, parseInt(e.target.value) || 0)}
+                                  className="w-20 mx-auto text-center"
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                 </div>
               )}
