@@ -48,6 +48,7 @@ import {
   DollarSign,
   ImageIcon,
   X,
+  RotateCcw,
 } from 'lucide-react'
 
 export function ModelsTab() {
@@ -254,6 +255,32 @@ export function ModelsTab() {
       }
     } catch {
       toast.error('Failed to save pricing')
+    } finally {
+      setPricingSaving(false)
+    }
+  }
+
+  const handleResetPricing = async () => {
+    if (!pricingModel) return
+    setPricingSaving(true)
+    try {
+      const res = await fetch(`/api/admin/pricing?modelId=${encodeURIComponent(pricingModel.modelId)}`, {
+        method: 'DELETE',
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.success && data.data?.pricing) {
+          setPricingForm({
+            format: data.data.pricing.format,
+            tiers: { ...data.data.pricing.tiers },
+          })
+          toast.success('Pricing reset to defaults')
+        }
+      } else {
+        toast.error('Failed to reset pricing')
+      }
+    } catch {
+      toast.error('Failed to reset pricing')
     } finally {
       setPricingSaving(false)
     }
@@ -556,18 +583,30 @@ export function ModelsTab() {
                 </div>
               )}
 
-              <DialogFooter className="pt-2">
-                <Button variant="outline" onClick={() => { setPricingModel(null); setPricingForm(null) }}>
-                  Cancel
-                </Button>
+              <DialogFooter className="pt-2 flex-row justify-between">
                 <Button
-                  onClick={handleSavePricing}
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleResetPricing}
                   disabled={pricingSaving}
-                  className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 gap-2"
+                  className="text-muted-foreground hover:text-amber-400 gap-1.5"
                 >
-                  {pricingSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-                  Save Pricing
+                  {pricingSaving ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
+                  Reset to Default
                 </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => { setPricingModel(null); setPricingForm(null) }}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleSavePricing}
+                    disabled={pricingSaving}
+                    className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 gap-2"
+                  >
+                    {pricingSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                    Save Pricing
+                  </Button>
+                </div>
               </DialogFooter>
             </div>
           ) : (

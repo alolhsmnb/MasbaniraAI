@@ -132,6 +132,67 @@ export async function PUT(request: NextRequest) {
   }
 }
 
+// DELETE /api/admin/pricing?modelId=xxx - Reset pricing to defaults (delete stored + return fresh defaults)
+export async function DELETE(request: NextRequest) {
+  try {
+    await requireAdmin(request)
+
+    const { searchParams } = new URL(request.url)
+    const modelId = searchParams.get('modelId')
+
+    if (!modelId) {
+      return NextResponse.json(
+        { success: false, error: 'modelId is required' },
+        { status: 400 }
+      )
+    }
+
+    const model = await db.aiModel.findUnique({
+      where: { modelId },
+    })
+
+    if (!model) {
+      return NextResponse.json(
+        { success: false, error: 'Model not found' },
+        { status: 404 }
+      )
+    }
+
+    // Delete existing pricing
+    try {
+      await db.modelPricing.deleteMany({
+        where: { modelId: model.id },
+      })
+    } catch {
+      // May not exist yet, ignore
+    }
+
+    // Return fresh defaults
+    const defaultPricing = getDefaultPricing(model.type, model.modelId)
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        modelId: model.modelId,
+        modelType: model.type,
+        pricing: defaultPricing,
+      },
+    })
+  } catch (error) {
+    console.error('Reset pricing error:', error)
+    if (error instanceof AuthError) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: error.statusCode }
+      )
+    }
+    return NextResponse.json(
+      { success: false, error: 'Failed to reset pricing' },
+      { status: 500 }
+    )
+  }
+}
+
 // Helper: Generate default pricing based on model type
 export function getDefaultPricing(modelType: string, modelModelId: string) {
   // Sora2 models use frames instead of duration
