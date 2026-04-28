@@ -9,10 +9,13 @@ interface WavespeedCreateInput {
   aspectRatio?: string
   duration?: number
   imageInput?: string[]
+  images?: string[] // For GPT Image 2 Edit (array of image URLs)
   cfgScale?: number
   sound?: boolean
   shotType?: string
   endImage?: string
+  quality?: string // GPT Image 2: low, medium, high
+  resolution?: string // GPT Image 2: 1k, 2k, 4k
   webhookUrl?: string
 }
 
@@ -76,11 +79,18 @@ export async function createWavespeedTask(
   if (input.imageInput && input.imageInput.length > 0) {
     body.image = input.imageInput[0]
   }
+  // GPT Image 2 Edit uses 'images' array
+  if (input.images && input.images.length > 0) {
+    body.images = input.images
+  }
   if (input.cfgScale !== undefined) body.cfg_scale = input.cfgScale
   if (input.sound !== undefined) body.sound = input.sound
   // Only send shot_type for 'customize' — 'intelligent' is the API default, do not send it
   if (input.shotType && input.shotType !== 'intelligent') body.shot_type = input.shotType
   if (input.endImage) body.end_image = input.endImage
+  // GPT Image 2 params
+  if (input.quality) body.quality = input.quality
+  if (input.resolution) body.resolution = input.resolution
   // Kling models require element_list and multi_prompt
   if (input.model.includes('kling')) {
     body.element_list = []

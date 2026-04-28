@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json()
-    const { modelId, prompt, aspectRatio, imageSize, rotation, type, imageInput, outputFormat, mode, duration, nFrames, removeWatermark, enableTranslation, watermark, seedanceFirstFrameUrl, seedanceLastFrameUrl, seedanceReferenceImageUrls, seedanceReferenceVideoUrls, seedanceReferenceAudioUrls, seedanceResolution, seedanceGenerateAudio, seedanceWebSearch, negativePrompt, klingCfgScale, klingSound, klingShotType } = body || {}
+    const { modelId, prompt, aspectRatio, imageSize, rotation, type, imageInput, outputFormat, mode, duration, nFrames, removeWatermark, enableTranslation, watermark, seedanceFirstFrameUrl, seedanceLastFrameUrl, seedanceReferenceImageUrls, seedanceReferenceVideoUrls, seedanceReferenceAudioUrls, seedanceResolution, seedanceGenerateAudio, seedanceWebSearch, negativePrompt, klingCfgScale, klingSound, klingShotType, gptImage2Resolution, gptImage2Quality } = body || {}
 
     if (!modelId) {
       return NextResponse.json(
@@ -104,24 +104,35 @@ export async function POST(request: NextRequest) {
     const modelProvider = model.provider || 'KIE'
 
     if (modelProvider === 'WAVESPEED') {
-      // WaveSpeed.AI provider (Kling models)
+      // WaveSpeed.AI provider (Kling + GPT Image 2 models)
+      const isKlingModel = model.modelId.startsWith('kwaivgi/kling')
       const isKlingImg2Vid = model.modelId === 'kwaivgi/kling-v3.0-std/image-to-video'
+      const isGptImage2Edit = model.modelId === 'openai/gpt-image-2/edit'
+      const isGptImage2 = model.modelId.startsWith('openai/gpt-image-2')
+
       // Build webhook URL dynamically from request headers
       const host = request.headers.get('host') || ''
       const protocol = request.headers.get('x-forwarded-proto') || 'https'
       const webhookUrl = host ? `${protocol}://${host}/api/generate/callback` : undefined
-      console.log(`[Generate] WaveSpeed webhook URL: ${webhookUrl || '(not set)'}`)
+      console.log(`[Generate] WaveSpeed webhook URL: ${webhookUrl || '(not set)'} model=${model.modelId}`)
 
       taskResult = await createWavespeedTask({
         model: model.modelId,
         prompt: prompt.trim() || undefined,
-        negativePrompt: negativePrompt || undefined,
+        negativePrompt: !isGptImage2 ? (negativePrompt || undefined) : undefined,
         aspectRatio: isKlingImg2Vid ? undefined : aspectRatio,
-        duration: duration ? parseInt(String(duration)) : undefined,
+        duration: isKlingModel && duration ? parseInt(String(duration)) : undefined,
+        // Kling image-to-video uses single image
         imageInput: isKlingImg2Vid && imageInput && imageInput.length > 0 ? imageInput : undefined,
-        cfgScale: klingCfgScale !== undefined ? klingCfgScale : undefined,
-        sound: klingSound !== undefined ? klingSound : undefined,
-        shotType: klingShotType || undefined,
+        // GPT Image 2 Edit uses images array
+        images: isGptImage2Edit && imageInput && imageInput.length > 0 ? imageInput : undefined,
+        // Kling-specific params
+        cfgScale: isKlingModel && klingCfgScale !== undefined ? klingCfgScale : undefined,
+        sound: isKlingModel && klingSound !== undefined ? klingSound : undefined,
+        shotType: isKlingModel ? klingShotType : undefined,
+        // GPT Image 2 params
+        quality: isGptImage2 ? gptImage2Quality : undefined,
+        resolution: isGptImage2 ? gptImage2Resolution : undefined,
         webhookUrl,
       })
     } else if (model.modelId.startsWith('veo3')) {
@@ -258,9 +269,10 @@ export async function POST(request: NextRequest) {
       const fallbackGenId = generation.id
       const fallbackUserId = user.id
       const fallbackCost = cost
-      // Dynamic wait based on video duration
-      const videoDuration = duration ? parseInt(String(duration)) : 5
-      const waitMs = Math.max(90_000, videoDuration * 20_000)
+      // Dynamic wait: longer for video (Kling), shorter for image (GPT Image 2)
+      const isWaveSpeedVideo = model.modelId.startsWith('kwaivgi/kling')
+      const videoDuration = isWaveSpeedVideo && duration ? parseInt(String(duration)) : 5
+      const waitMs = isWaveSpeedVideo ? Math.max(90_000, videoDuration * 20_000) : 60_000
       after(async () => {
         try {
           console.log(`[WaveSpeed Fallback] Waiting ${waitMs / 1000}s for task ${fallbackTaskId} (video=${videoDuration}s)`)

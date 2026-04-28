@@ -94,6 +94,12 @@ const KLING_MODELS = ['kwaivgi/kling-v3.0-std/text-to-video', 'kwaivgi/kling-v3.
 const KLING_ASPECT_RATIOS = ['16:9', '9:16', '1:1']
 const KLING_SHOT_TYPES = ['intelligent', 'customize']
 
+// GPT Image 2 models (WaveSpeed)
+const GPT_IMAGE2_MODELS = ['openai/gpt-image-2/text-to-image', 'openai/gpt-image-2/edit']
+const GPT_IMAGE2_ASPECT_RATIOS = ['1:1', '3:2', '2:3', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9']
+const GPT_IMAGE2_RESOLUTIONS = ['1k', '2k', '4k']
+const GPT_IMAGE2_QUALITIES = ['low', 'medium', 'high']
+
 export function GeneratePage() {
   const { credits, setCredits } = useAppStore()
   const [models, setModels] = useState<Model[]>([])
@@ -120,6 +126,10 @@ export function GeneratePage() {
   const [klingCfgScale, setKlingCfgScale] = useState(0.5)
   const [klingSound, setKlingSound] = useState(false)
   const [klingShotType, setKlingShotType] = useState('intelligent')
+
+  // GPT Image 2 state
+  const [gptImage2Resolution, setGptImage2Resolution] = useState('1k')
+  const [gptImage2Quality, setGptImage2Quality] = useState('medium')
 
   // Seedance state
   const [seedanceDuration, setSeedanceDuration] = useState(5)
@@ -204,9 +214,12 @@ export function GeneratePage() {
   // Check if current model supports/requires image input (must be before useMemo that uses these)
   const isSeedanceModel = SEEDANCE_MODELS.includes(selectedModel)
   const isKlingModel = KLING_MODELS.includes(selectedModel)
-  const currentModelSupportsImage = IMAGE_INPUT_MODELS.includes(selectedModel) || IMAGE_REQUIRED_MODELS.includes(selectedModel) || isSeedanceModel || isKlingModel || selectedModel.startsWith('veo3')
-  const currentModelRequiresImage = IMAGE_REQUIRED_MODELS.includes(selectedModel) || selectedModel === 'kwaivgi/kling-v3.0-std/image-to-video'
+  const isGptImage2Model = GPT_IMAGE2_MODELS.includes(selectedModel)
+  const isGptImage2Edit = selectedModel === 'openai/gpt-image-2/edit'
+  const currentModelSupportsImage = IMAGE_INPUT_MODELS.includes(selectedModel) || IMAGE_REQUIRED_MODELS.includes(selectedModel) || isSeedanceModel || isKlingModel || isGptImage2Model || selectedModel.startsWith('veo3')
+  const currentModelRequiresImage = IMAGE_REQUIRED_MODELS.includes(selectedModel) || selectedModel === 'kwaivgi/kling-v3.0-std/image-to-video' || isGptImage2Edit
   const isVideoModel = VIDEO_MODELS.includes(selectedModel) || selectedModel.startsWith('veo3') || isKlingModel
+  const isWavespeedImageModel = isGptImage2Model // WaveSpeed image models (not video)
   const currentModelIsImageToVideo = selectedModel === 'grok-imagine/image-to-video' || selectedModel === 'kwaivgi/kling-v3.0-std/image-to-video'
   const isSora2Model = SORA2_MODELS.includes(selectedModel)
   const isVeoModel = selectedModel.startsWith('veo3')
@@ -220,7 +233,7 @@ export function GeneratePage() {
     if (!tiers) return 1
 
     if (format === 'resolution') {
-      const res = imageSize === 'Auto' ? 'Auto' : imageSize
+      const res = isGptImage2Model ? gptImage2Resolution.toUpperCase() : (imageSize === 'Auto' ? 'Auto' : imageSize)
       return Math.max(1, parseInt(String(tiers[res])) || 1)
     }
     if (format === 'duration_resolution') {
@@ -243,7 +256,7 @@ export function GeneratePage() {
       return Math.max(1, parseInt(String(tiers.default)) || 1)
     }
     return 1
-  }, [models, selectedModel, imageSize, videoDuration, videoResolution, soraFrames, isKlingModel, klingDuration])
+  }, [models, selectedModel, imageSize, videoDuration, videoResolution, soraFrames, isKlingModel, klingDuration, isGptImage2Model, gptImage2Resolution])
 
   // Reset aspect ratio when switching to Veo/Seedance/Kling model
   const handleModelChange = useCallback((modelId: string) => {
@@ -256,6 +269,11 @@ export function GeneratePage() {
     }
     if (KLING_MODELS.includes(modelId)) {
       setAspectRatio('16:9')
+    }
+    if (GPT_IMAGE2_MODELS.includes(modelId)) {
+      setAspectRatio('1:1')
+      setGptImage2Resolution('1k')
+      setGptImage2Quality('medium')
     }
   }, [])
 
@@ -519,18 +537,24 @@ export function GeneratePage() {
         klingShotType,
       } : {}
 
+      // Build GPT Image 2 specific payload
+      const gptImage2Payload = isGptImage2Model ? {
+        gptImage2Resolution,
+        gptImage2Quality,
+      } : {}
+
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           modelId: selectedModel,
           prompt: prompt.trim() || undefined,
-          aspectRatio: isVeoModel ? (aspectRatio || '16:9') : isSora2Model ? (aspectRatio === 'portrait' || aspectRatio === 'landscape' ? aspectRatio : 'landscape') : isSeedanceModel ? (aspectRatio || '16:9') : isKlingModel ? (aspectRatio || '16:9') : aspectRatio,
+          aspectRatio: isVeoModel ? (aspectRatio || '16:9') : isSora2Model ? (aspectRatio === 'portrait' || aspectRatio === 'landscape' ? aspectRatio : 'landscape') : isSeedanceModel ? (aspectRatio || '16:9') : isKlingModel ? (aspectRatio || '16:9') : isGptImage2Model ? (aspectRatio || '1:1') : aspectRatio,
           imageSize: isVeoModel ? veoResolution : (isSeedanceModel ? seedanceResolution : (isVideoModel && !isSora2Model ? videoResolution : (imageSize === 'Auto' ? 'AUTO' : imageSize))),
           rotation: parseInt(rotation),
           type: isVideoModel ? 'VIDEO' : genType,
           imageInput: allImageUrls.length > 0 ? allImageUrls : undefined,
-          outputFormat: !isVideoModel && currentModelSupportsImage ? outputFormat : undefined,
+          outputFormat: !isVideoModel && !isGptImage2Model && currentModelSupportsImage ? outputFormat : undefined,
           mode: isVideoModel && !isSora2Model && !isVeoModel && !isSeedanceModel && !isKlingModel ? videoMode : undefined,
           duration: isSeedanceModel ? seedanceDuration : isKlingModel ? klingDuration : (isVideoModel && !isSora2Model && !isVeoModel ? videoDuration : undefined),
           nFrames: isSora2Model ? soraFrames : undefined,
@@ -538,6 +562,7 @@ export function GeneratePage() {
           enableTranslation: isVeoModel ? enableTranslation : undefined,
           ...seedancePayload,
           ...klingPayload,
+          ...gptImage2Payload,
         }),
       })
 
@@ -1071,6 +1096,49 @@ export function GeneratePage() {
                               </button>
                             </div>
                           )}
+                          {/* GPT Image 2: Resolution & Quality */}
+                          {isGptImage2Model && (
+                            <div className="space-y-3">
+                              {/* Resolution */}
+                              <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground">Resolution</Label>
+                                <div className="grid grid-cols-3 gap-2">
+                                  {GPT_IMAGE2_RESOLUTIONS.map((res) => (
+                                    <button
+                                      key={res}
+                                      onClick={() => setGptImage2Resolution(res)}
+                                      className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                        gptImage2Resolution === res
+                                          ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/20'
+                                          : 'bg-white/5 border border-white/10 text-muted-foreground hover:border-emerald-500/30 hover:text-foreground'
+                                      }`}
+                                    >
+                                      {res.toUpperCase()}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              {/* Quality */}
+                              <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground">Quality</Label>
+                                <div className="grid grid-cols-3 gap-2">
+                                  {GPT_IMAGE2_QUALITIES.map((q) => (
+                                    <button
+                                      key={q}
+                                      onClick={() => setGptImage2Quality(q)}
+                                      className={`px-3 py-2 rounded-lg text-xs font-medium transition-all capitalize ${
+                                        gptImage2Quality === q
+                                          ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/20'
+                                          : 'bg-white/5 border border-white/10 text-muted-foreground hover:border-emerald-500/30 hover:text-foreground'
+                                      }`}
+                                    >
+                                      {q}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
                           {/* Sora2: Frames */}
                           {isSora2Model && (
                             <div className="space-y-2">
@@ -1321,7 +1389,7 @@ export function GeneratePage() {
                                 </SelectContent>
                               </Select>
                             </div>
-                          ) : isVeoModel || isKlingModel ? null : (
+                          ) : isVeoModel || isKlingModel || isGptImage2Model ? null : (
                             <div className="space-y-2">
                               <Label className="text-xs text-muted-foreground">Resolution</Label>
                               <Select value={imageSize} onValueChange={setImageSize}>
@@ -1346,6 +1414,7 @@ export function GeneratePage() {
                                 isSora2Model ? (aspectRatio === 'portrait' || aspectRatio === 'landscape' ? aspectRatio : 'landscape') :
                                 isSeedanceModel ? (aspectRatio || '16:9') :
                                 isKlingModel ? (aspectRatio || '16:9') :
+                                isGptImage2Model ? (aspectRatio || '1:1') :
                                 aspectRatio
                               }
                               onValueChange={(val) => setAspectRatio(val)}
@@ -1356,7 +1425,7 @@ export function GeneratePage() {
                               <SelectContent>
                                 {(isVeoModel
                                   ? VEO_ASPECT_RATIOS
-                                  : isSora2Model ? SORA2_ASPECT_RATIOS : isSeedanceModel ? SEEDANCE_ASPECT_RATIOS : isKlingModel ? KLING_ASPECT_RATIOS : ASPECT_RATIOS
+                                  : isSora2Model ? SORA2_ASPECT_RATIOS : isSeedanceModel ? SEEDANCE_ASPECT_RATIOS : isKlingModel ? KLING_ASPECT_RATIOS : isGptImage2Model ? GPT_IMAGE2_ASPECT_RATIOS : ASPECT_RATIOS
                                 ).map((ratio) => (
                                   <SelectItem key={ratio} value={ratio}>
                                     {ratio === 'portrait' ? '📱 Portrait' : ratio === 'landscape' ? '🖥️ Landscape' : ratio === 'Auto' ? '🔄 Auto' : ratio === 'adaptive' ? '🔄 Adaptive' : ratio === '16:9' ? '🖥️ 16:9 Landscape' : ratio === '9:16' ? '📱 9:16 Portrait' : ratio === '1:1' ? '⬜ 1:1 Square' : ratio}
@@ -1404,7 +1473,7 @@ export function GeneratePage() {
                               </button>
                             </div>
                           )}
-                          {!isVideoModel && currentModelSupportsImage && (
+                          {!isVideoModel && !isGptImage2Model && currentModelSupportsImage && (
                             <div className="space-y-2">
                               <Label className="text-xs text-muted-foreground">Output Format</Label>
                               <Select value={outputFormat} onValueChange={setOutputFormat}>
@@ -1421,7 +1490,7 @@ export function GeneratePage() {
                               </Select>
                             </div>
                           )}
-                          {!isVideoModel && (
+                          {!isVideoModel && !isGptImage2Model && (
                             <div className="space-y-2">
                               <Label className="text-xs text-muted-foreground">Rotation</Label>
                               <Select value={rotation} onValueChange={setRotation}>
