@@ -12,13 +12,18 @@ function verifyWaveSpeedSignature(rawBody: string, headers: Headers, secret: str
     const timestamp = headers.get('webhook-timestamp')
     const signatureHeader = headers.get('webhook-signature')
 
+    console.log(`[Webhook/SigDebug] webhook-id=${webhookId}, timestamp=${timestamp}, signature=${signatureHeader?.substring(0, 20)}...`)
+    console.log(`[Webhook/SigDebug] rawBody length=${rawBody.length}, first80=${rawBody.substring(0, 80)}`)
+    console.log(`[Webhook/SigDebug] secret length=${secret.length}, secret prefix=${secret.substring(0, 10)}...`)
+
     if (!webhookId || !timestamp || !signatureHeader) {
-      return false // No WaveSpeed headers → not a WaveSpeed callback
+      console.log('[Webhook/SigDebug] Missing required headers')
+      return false
     }
 
     const [version, receivedSignature] = signatureHeader.split(',')
     if (version !== 'v3') {
-      console.warn(`[Webhook] Unknown WaveSpeed signature version: ${version}`)
+      console.warn(`[Webhook/SigDebug] Unknown signature version: ${version}`)
       return false
     }
 
@@ -29,8 +34,13 @@ function verifyWaveSpeedSignature(rawBody: string, headers: Headers, secret: str
       .update(signedContent)
       .digest('hex')
 
+    console.log(`[Webhook/SigDebug] signedContent=${signedContent.substring(0, 80)}...`)
+    console.log(`[Webhook/SigDebug] expected=${expectedSignature}`)
+    console.log(`[Webhook/SigDebug] received=${receivedSignature}`)
+    console.log(`[Webhook/SigDebug] match=${expectedSignature === receivedSignature}`)
+
     if (Math.abs(Date.now() / 1000 - parseInt(timestamp)) > 300) {
-      console.warn('[Webhook] WaveSpeed timestamp too old')
+      console.warn('[Webhook/SigDebug] Timestamp too old')
       return false
     }
 
@@ -39,7 +49,7 @@ function verifyWaveSpeedSignature(rawBody: string, headers: Headers, secret: str
       Buffer.from(receivedSignature)
     )
   } catch (err) {
-    console.error('[Webhook] WaveSpeed signature verification error:', err)
+    console.error('[Webhook/SigDebug] Verification error:', err)
     return false
   }
 }
