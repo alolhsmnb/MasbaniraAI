@@ -2,6 +2,25 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin, AuthError } from '@/lib/auth'
 
+const DEFAULT_MODELS = [
+  {
+    modelId: 'openai/gpt-image-2/text-to-image',
+    name: 'GPT Image 2 (WaveSpeed)',
+    type: 'IMAGE',
+    provider: 'WAVESPEED',
+    isActive: true,
+    sortOrder: 0,
+  },
+  {
+    modelId: 'openai/gpt-image-2/edit',
+    name: 'GPT Image 2 Edit (WaveSpeed)',
+    type: 'IMAGE',
+    provider: 'WAVESPEED',
+    isActive: true,
+    sortOrder: 0,
+  },
+]
+
 const DEFAULT_SETTINGS: Record<string, string> = {
   site_name: 'PixelForge AI',
   site_description: 'Professional AI-powered platform for generating stunning images and videos',
@@ -80,6 +99,8 @@ export async function POST(request: NextRequest) {
       settingsSkipped: 0,
       plansCreated: 0,
       plansSkipped: 0,
+      modelsCreated: 0,
+      modelsSkipped: 0,
     }
 
     // Seed settings (only if not already present)
@@ -95,6 +116,22 @@ export async function POST(request: NextRequest) {
         results.settingsCreated++
       } else {
         results.settingsSkipped++
+      }
+    }
+
+    // Seed models (only if not already present)
+    for (const model of DEFAULT_MODELS) {
+      const existing = await db.aiModel.findUnique({
+        where: { modelId: model.modelId },
+      })
+
+      if (!existing) {
+        await db.aiModel.create({
+          data: model,
+        })
+        results.modelsCreated++
+      } else {
+        results.modelsSkipped++
       }
     }
 
