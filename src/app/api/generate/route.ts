@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse, after } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, AuthError } from '@/lib/auth'
 import { createTask, createVeoTask } from '@/lib/kie-api'
-import { createWavespeedTask, checkWavespeedTaskStatus, extractWavespeedResultUrl } from '@/lib/wavespeed-api'
+import { createWavespeedTask } from '@/lib/wavespeed-api'
 import { getDefaultPricing } from '@/app/api/admin/pricing/route'
 
 export async function POST(request: NextRequest) {
@@ -269,57 +269,8 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // WaveSpeed fallback: after() runs server-side AFTER response is sent.
-    // No client polling. If webhook didn't arrive, check once via API.
-    if (modelProvider === 'WAVESPEED') {
-      const fallbackTaskId = taskResult.taskId
-      const fallbackGenId = generation.id
-      const fallbackUserId = user.id
-      const fallbackCost = cost
-      // Dynamic wait: longer for video (Kling), shorter for image (GPT Image 2)
-      const isWaveSpeedVideo = model.modelId.startsWith('kwaivgi/kling')
-      const videoDuration = isWaveSpeedVideo && duration ? parseInt(String(duration)) : 5
-      const waitMs = isWaveSpeedVideo ? Math.max(90_000, videoDuration * 20_000) : 60_000
-      after(async () => {
-        try {
-          console.log(`[WaveSpeed Fallback] Waiting ${waitMs / 1000}s for task ${fallbackTaskId} (video=${videoDuration}s)`)
-          await new Promise(r => setTimeout(r, waitMs))
-          const gen = await db.generation.findUnique({ where: { id: fallbackGenId } })
-          if (!gen || gen.status !== 'PROCESSING') {
-            console.log(`[WaveSpeed Fallback] Task ${fallbackTaskId} already ${gen?.status || 'gone'}, skip`)
-            return
-          }
-          const keys = await db.apiKey.findMany({ where: { isActive: true, provider: 'WAVESPEED' }, orderBy: { createdAt: 'asc' } })
-          if (keys.length === 0) {
-            console.warn(`[WaveSpeed Fallback] No active keys, skip`)
-            return
-          }
-          console.log(`[WaveSpeed Fallback] Checking task ${fallbackTaskId}...`)
-          const result = await checkWavespeedTaskStatus(fallbackTaskId, keys[0].key)
-          if (result.state === 'SUCCEED') {
-            const url = extractWavespeedResultUrl(result.result)
-            await db.generation.update({
-              where: { id: fallbackGenId },
-              data: { status: 'COMPLETED', resultUrl: url || result.resultJson || '' },
-            })
-            console.log(`[WaveSpeed Fallback] ✓ Task ${fallbackTaskId} completed, url=${url || '(none)'}`)
-          } else if (result.state === 'FAILED') {
-            if (fallbackCost > 0) {
-              try { await db.user.update({ where: { id: fallbackUserId }, data: { paidCredits: { increment: fallbackCost } } }) } catch { /* ignore */ }
-            }
-            await db.generation.update({
-              where: { id: fallbackGenId },
-              data: { status: 'FAILED', resultUrl: 'Generation failed at provider' },
-            })
-            console.log(`[WaveSpeed Fallback] ✗ Task ${fallbackTaskId} failed, refunded ${fallbackCost} credits`)
-          } else {
-            console.log(`[WaveSpeed Fallback] Task ${fallbackTaskId} still running (${result.status})`)
-          }
-        } catch (err) {
-          console.error(`[WaveSpeed Fallback] Error for task ${fallbackTaskId}:`, err)
-        }
-      })
-    }
+    // WaveSpeed: completion handled entirely via webhook callback
+    // No fallback polling
 
     return NextResponse.json({
       success: true,
