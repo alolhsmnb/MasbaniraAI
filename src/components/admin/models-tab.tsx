@@ -72,9 +72,37 @@ export function ModelsTab() {
   const [pricingLoading, setPricingLoading] = useState(false)
   const [pricingSaving, setPricingSaving] = useState(false)
 
+  // Auto-seed required WaveSpeed models if missing
+  const REQUIRED_WAVESPEED_MODELS = [
+    { modelId: 'openai/gpt-image-2/text-to-image', name: 'GPT Image 2 (WaveSpeed)', type: 'IMAGE', provider: 'WAVESPEED' },
+    { modelId: 'openai/gpt-image-2/edit', name: 'GPT Image 2 Edit (WaveSpeed)', type: 'IMAGE', provider: 'WAVESPEED' },
+  ]
+
+  const ensureRequiredModels = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/models')
+      if (!res.ok) return
+      const data = await res.json()
+      if (!data.success) return
+      const existingIds = new Set((data.data || []).map((m: any) => m.modelId))
+      for (const model of REQUIRED_WAVESPEED_MODELS) {
+        if (!existingIds.has(model.modelId)) {
+          await fetch('/api/admin/models', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(model),
+          })
+        }
+      }
+    } catch {
+      // silent
+    }
+  }, [])
+
   const fetchModels = useCallback(async () => {
     setLoading(true)
     try {
+      await ensureRequiredModels()
       const res = await fetch('/api/admin/models')
       if (res.ok) {
         const data = await res.json()
@@ -85,7 +113,7 @@ export function ModelsTab() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [ensureRequiredModels])
 
   useEffect(() => {
     fetchModels()
