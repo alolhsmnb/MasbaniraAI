@@ -199,8 +199,10 @@ export function getDefaultPricing(modelType: string, modelModelId: string) {
   const isSora2 = modelModelId.startsWith('sora-2')
   // Veo models have flat pricing
   const isVeo = modelModelId.startsWith('veo3')
-  // Seedance has fixed settings, uses flat pricing
+  // Seedance (KIE) has fixed settings, uses flat pricing
   const isSeedance = modelModelId === 'bytedance/seedance-2-fast'
+  // Seedance WaveSpeed: duration-based (5s, 10s)
+  const isSeedanceWs = modelModelId === 'bytedance/seedance-2.0-fast/text-to-video'
   // Kling models: pricing by duration only
   const isKling = modelModelId.startsWith('kwaivgi/kling')
   // GPT Image 2: pricing by resolution × quality
@@ -245,6 +247,16 @@ export function getDefaultPricing(modelType: string, modelModelId: string) {
       format: 'flat',
       tiers: {
         default: 10,
+      },
+    }
+  }
+
+  if (isSeedanceWs) {
+    return {
+      format: 'duration',
+      tiers: {
+        '5': 10,
+        '10': 15,
       },
     }
   }

@@ -76,6 +76,7 @@ export function ModelsTab() {
   const REQUIRED_WAVESPEED_MODELS = [
     { modelId: 'openai/gpt-image-2/text-to-image', name: 'GPT Image 2 (WaveSpeed)', type: 'IMAGE', provider: 'WAVESPEED' },
     { modelId: 'openai/gpt-image-2/edit', name: 'GPT Image 2 Edit (WaveSpeed)', type: 'IMAGE', provider: 'WAVESPEED' },
+    { modelId: 'bytedance/seedance-2.0-fast/text-to-video', name: 'Seedance 2.0 Fast (WaveSpeed)', type: 'VIDEO', provider: 'WAVESPEED' },
   ]
 
   const ensureRequiredModels = useCallback(async () => {
@@ -234,7 +235,7 @@ export function ModelsTab() {
     if (model.type === 'IMAGE') return 'resolution'
     if (model.modelId.startsWith('sora-2')) return 'frames'
     if (model.modelId.startsWith('veo3') || model.modelId === 'bytedance/seedance-2-fast') return 'flat'
-    if (model.modelId.startsWith('kwaivgi/kling')) return 'duration'
+    if (model.modelId.startsWith('kwaivgi/kling') || model.modelId === 'bytedance/seedance-2.0-fast/text-to-video') return 'duration'
     return 'duration_resolution'
   }
 

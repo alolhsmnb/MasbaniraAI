@@ -111,11 +111,12 @@ export async function POST(request: NextRequest) {
     let taskResult: { taskId: string; apiKeyId: string }
 
     if (modelProvider === 'WAVESPEED') {
-      // WaveSpeed.AI provider (Kling + GPT Image 2 models)
+      // WaveSpeed.AI provider (Kling + GPT Image 2 + Seedance models)
       const isKlingModel = model.modelId.startsWith('kwaivgi/kling')
       const isKlingImg2Vid = model.modelId === 'kwaivgi/kling-v3.0-std/image-to-video'
       const isGptImage2Edit = model.modelId === 'openai/gpt-image-2/edit'
       const isGptImage2 = model.modelId.startsWith('openai/gpt-image-2')
+      const isSeedanceWs = model.modelId === 'bytedance/seedance-2.0-fast/text-to-video'
 
       // Build webhook URL dynamically from request headers
       const host = request.headers.get('host') || ''
@@ -126,20 +127,28 @@ export async function POST(request: NextRequest) {
       taskResult = await createWavespeedTask({
         model: model.modelId,
         prompt: prompt.trim() || undefined,
-        negativePrompt: !isGptImage2 ? (negativePrompt || undefined) : undefined,
+        negativePrompt: !isGptImage2 && !isSeedanceWs ? (negativePrompt || undefined) : undefined,
         aspectRatio: isKlingImg2Vid ? undefined : aspectRatio,
-        duration: isKlingModel && duration ? parseInt(String(duration)) : undefined,
+        duration: (isKlingModel || isSeedanceWs) && duration ? parseInt(String(duration)) : undefined,
         // Kling image-to-video uses single image
         imageInput: isKlingImg2Vid && imageInput && imageInput.length > 0 ? imageInput : undefined,
-        // GPT Image 2 Edit uses images array
-        images: isGptImage2Edit && imageInput && imageInput.length > 0 ? imageInput : undefined,
+        // GPT Image 2 Edit / Seedance WS use images array
+        images: (() => {
+          if (isGptImage2Edit && imageInput && imageInput.length > 0) return imageInput
+          if (isSeedanceWs && seedanceReferenceImageUrls && seedanceReferenceImageUrls.length > 0) return seedanceReferenceImageUrls
+          return undefined
+        })(),
         // Kling-specific params
         cfgScale: isKlingModel && klingCfgScale !== undefined ? klingCfgScale : undefined,
         sound: isKlingModel && klingSound !== undefined ? klingSound : undefined,
         shotType: isKlingModel ? klingShotType : undefined,
         // GPT Image 2 params
         quality: isGptImage2 ? gptImage2Quality : undefined,
-        resolution: isGptImage2 ? gptImage2Resolution : undefined,
+        resolution: isGptImage2 ? gptImage2Resolution : isSeedanceWs ? '480p' : undefined,
+        // Seedance WS extra params
+        reference_audios: isSeedanceWs && seedanceReferenceAudioUrls && seedanceReferenceAudioUrls.length > 0 ? seedanceReferenceAudioUrls : undefined,
+        reference_videos: isSeedanceWs && seedanceReferenceVideoUrls && seedanceReferenceVideoUrls.length > 0 ? seedanceReferenceVideoUrls : undefined,
+        enable_web_search: isSeedanceWs && seedanceWebSearch ? true : undefined,
         webhookUrl,
       })
     } else if (model.modelId.startsWith('veo3')) {

@@ -71,18 +71,22 @@ const OUTPUT_FORMATS = ['png', 'jpg']
 const VIDEO_MODES = ['fun', 'normal', 'spicy']
 const SORA2_ASPECT_RATIOS = ['landscape', 'portrait']
 const SORA2_FRAMES = ['10', '15']
-// Seedance 2.0 Fast
+// Seedance 2.0 Fast (KIE)
 const SEEDANCE_ASPECT_RATIOS = ['16:9', '1:1', '4:3', '3:4', '9:16', '21:9', 'adaptive']
 const SEEDANCE_RESOLUTIONS = ['480p', '720p']
+// Seedance 2.0 Fast WaveSpeed — 480p only, 5s and 10s
+const SEEDANCE_WS_DURATIONS = [5, 10]
 
 // Models that support image input (optional)
-const IMAGE_INPUT_MODELS = ['nano-banana-pro', 'nano-banana-2', 'veo3', 'veo3_fast', 'veo3_lite']
+const IMAGE_INPUT_MODELS = ['nano-banana-pro', 'nano-banana-2', 'veo3', 'veo3_fast', 'veo3_lite', SEEDANCE_WS_MODEL]
 // Seedance models (support image input for frames/references)
 const SEEDANCE_MODELS = ['bytedance/seedance-2-fast']
+// WaveSpeed Seedance
+const SEEDANCE_WS_MODEL = 'bytedance/seedance-2.0-fast/text-to-video'
 // Models that require image input
 const IMAGE_REQUIRED_MODELS = ['grok-imagine/image-to-image', 'grok-imagine/image-to-video', 'sora-2-image-to-video']
 // Video models
-const VIDEO_MODELS = ['grok-imagine/text-to-video', 'grok-imagine/image-to-video', 'sora-2-text-to-video', 'sora-2-image-to-video', 'veo3', 'veo3_fast', 'veo3_lite', 'bytedance/seedance-2-fast']
+const VIDEO_MODELS = ['grok-imagine/text-to-video', 'grok-imagine/image-to-video', 'sora-2-text-to-video', 'sora-2-image-to-video', 'veo3', 'veo3_fast', 'veo3_lite', 'bytedance/seedance-2-fast', 'bytedance/seedance-2.0-fast/text-to-video']
 // Sora2 models (use n_frames instead of duration, portrait/landscape instead of ratios)
 const SORA2_MODELS = ['sora-2-text-to-video', 'sora-2-image-to-video']
 const VEO_MODELS = ['veo3', 'veo3_fast', 'veo3_lite']
@@ -213,6 +217,7 @@ export function GeneratePage() {
 
   // Check if current model supports/requires image input (must be before useMemo that uses these)
   const isSeedanceModel = SEEDANCE_MODELS.includes(selectedModel)
+  const isSeedanceWsModel = selectedModel === SEEDANCE_WS_MODEL
   const isKlingModel = KLING_MODELS.includes(selectedModel)
   const isGptImage2Model = GPT_IMAGE2_MODELS.includes(selectedModel)
   const isGptImage2Edit = selectedModel === 'openai/gpt-image-2/edit'
@@ -245,8 +250,8 @@ export function GeneratePage() {
       return 1
     }
     if (format === 'duration') {
-      // Kling: pricing by duration only
-      const dur = isKlingModel ? String(klingDuration) : String(videoDuration)
+      // Kling / Seedance WS: pricing by duration only
+      const dur = isKlingModel ? String(klingDuration) : isSeedanceWsModel ? String(seedanceDuration) : String(videoDuration)
       return Math.max(1, parseInt(String(tiers[dur])) || 1)
     }
     if (format === 'frames') {
@@ -266,7 +271,7 @@ export function GeneratePage() {
       return Math.max(1, parseInt(String(tiers.default)) || 1)
     }
     return 1
-  }, [models, selectedModel, imageSize, videoDuration, videoResolution, soraFrames, isKlingModel, klingDuration, isGptImage2Model, gptImage2Resolution, gptImage2Quality])
+  }, [models, selectedModel, imageSize, videoDuration, videoResolution, soraFrames, isKlingModel, klingDuration, isGptImage2Model, gptImage2Resolution, gptImage2Quality, isSeedanceWsModel, seedanceDuration])
 
   // Reset aspect ratio when switching to Veo/Seedance/Kling model
   const handleModelChange = useCallback((modelId: string) => {
@@ -276,6 +281,10 @@ export function GeneratePage() {
     }
     if (modelId === 'bytedance/seedance-2-fast') {
       setAspectRatio('16:9')
+    }
+    if (modelId === SEEDANCE_WS_MODEL) {
+      setAspectRatio('16:9')
+      setSeedanceDuration(5)
     }
     if (KLING_MODELS.includes(modelId)) {
       setAspectRatio('16:9')
@@ -527,7 +536,7 @@ export function GeneratePage() {
     ]
 
     try {
-      // Build Seedance-specific payload
+      // Build Seedance-specific payload (KIE)
       const seedancePayload = isSeedanceModel ? {
         seedanceFirstFrameUrl: seedanceFirstFrame?.url || (allImageUrls.length >= 1 ? allImageUrls[0] : undefined),
         seedanceLastFrameUrl: seedanceLastFrame?.url || (allImageUrls.length >= 2 ? allImageUrls[1] : undefined),
@@ -537,6 +546,15 @@ export function GeneratePage() {
         seedanceDuration,
         seedanceResolution,
         seedanceGenerateAudio,
+        seedanceWebSearch,
+      } : {}
+
+      // Build WaveSpeed Seedance payload
+      const seedanceWsPayload = isSeedanceWsModel ? {
+        seedanceReferenceImageUrls: allImageUrls.length > 0 ? allImageUrls : undefined,
+        seedanceReferenceVideoUrls: seedanceRefVideoUrls.length > 0 ? seedanceRefVideoUrls : undefined,
+        seedanceReferenceAudioUrls: seedanceRefAudioUrls.length > 0 ? seedanceRefAudioUrls : undefined,
+        seedanceDuration,
         seedanceWebSearch,
       } : {}
 
@@ -559,18 +577,19 @@ export function GeneratePage() {
         body: JSON.stringify({
           modelId: selectedModel,
           prompt: prompt.trim() || undefined,
-          aspectRatio: isVeoModel ? (aspectRatio || '16:9') : isSora2Model ? (aspectRatio === 'portrait' || aspectRatio === 'landscape' ? aspectRatio : 'landscape') : isSeedanceModel ? (aspectRatio || '16:9') : isKlingModel ? (aspectRatio || '16:9') : isGptImage2Model ? (aspectRatio || '1:1') : aspectRatio,
+          aspectRatio: isVeoModel ? (aspectRatio || '16:9') : isSora2Model ? (aspectRatio === 'portrait' || aspectRatio === 'landscape' ? aspectRatio : 'landscape') : (isSeedanceModel || isSeedanceWsModel) ? (aspectRatio || '16:9') : isKlingModel ? (aspectRatio || '16:9') : isGptImage2Model ? (aspectRatio || '1:1') : aspectRatio,
           imageSize: isVeoModel ? veoResolution : (isSeedanceModel ? seedanceResolution : (isVideoModel && !isSora2Model ? videoResolution : (imageSize === 'Auto' ? 'AUTO' : imageSize))),
           rotation: parseInt(rotation),
           type: isVideoModel ? 'VIDEO' : genType,
           imageInput: allImageUrls.length > 0 ? allImageUrls : undefined,
           outputFormat: !isVideoModel && !isGptImage2Model && currentModelSupportsImage ? outputFormat : undefined,
-          mode: isVideoModel && !isSora2Model && !isVeoModel && !isSeedanceModel && !isKlingModel ? videoMode : undefined,
-          duration: isSeedanceModel ? seedanceDuration : isKlingModel ? klingDuration : (isVideoModel && !isSora2Model && !isVeoModel ? videoDuration : undefined),
+          mode: isVideoModel && !isSora2Model && !isVeoModel && !isSeedanceModel && !isSeedanceWsModel && !isKlingModel ? videoMode : undefined,
+          duration: (isSeedanceModel || isSeedanceWsModel) ? seedanceDuration : isKlingModel ? klingDuration : (isVideoModel && !isSora2Model && !isVeoModel ? videoDuration : undefined),
           nFrames: isSora2Model ? soraFrames : undefined,
           removeWatermark: isSora2Model ? removeWatermark : undefined,
           enableTranslation: isVeoModel ? enableTranslation : undefined,
           ...seedancePayload,
+          ...seedanceWsPayload,
           ...klingPayload,
           ...gptImage2Payload,
         }),
@@ -717,7 +736,7 @@ export function GeneratePage() {
                 {/* Image Upload Section */}
                 {currentModelSupportsImage && (
                   <div className="space-y-3">
-                    {isSeedanceModel ? (
+                    {isSeedanceModel || isSeedanceWsModel ? (
                       /* ===== Seedance: Two separate frame upload areas ===== */
                       <>
                         {/* Section label */}
@@ -975,7 +994,7 @@ export function GeneratePage() {
                       >
                         <div className="px-3 pb-3 space-y-3">
                           {/* Video Mode (Grok only, not Seedance/Kling) */}
-                          {isVideoModel && !isSora2Model && !isSeedanceModel && !isKlingModel && (
+                          {isVideoModel && !isSora2Model && !isSeedanceModel && !isSeedanceWsModel && !isKlingModel && (
                             <div className="space-y-2">
                               <Label className="text-xs text-muted-foreground">Motion Style</Label>
                               <div className="grid grid-cols-3 gap-2">
@@ -999,7 +1018,7 @@ export function GeneratePage() {
                             </div>
                           )}
                           {/* Video Duration (Grok only, not Seedance/Kling) */}
-                          {isVideoModel && !isSora2Model && !isVeoModel && !isSeedanceModel && !isKlingModel && (
+                          {isVideoModel && !isSora2Model && !isVeoModel && !isSeedanceModel && !isSeedanceWsModel && !isKlingModel && (
                             <div className="space-y-2">
                               <div className="flex items-center justify-between">
                                 <Label className="text-xs text-muted-foreground">Duration</Label>
@@ -1190,7 +1209,7 @@ export function GeneratePage() {
                               </button>
                             </div>
                           )}
-                          {/* Seedance: Full settings */}
+                          {/* Seedance: Full settings (KIE) */}
                           {isSeedanceModel ? (
                             <div className="space-y-3">
                               {/* Duration & Resolution - Fixed */}
@@ -1399,6 +1418,172 @@ export function GeneratePage() {
                                 </SelectContent>
                               </Select>
                             </div>
+                          ) : isSeedanceWsModel ? (
+                            /* WaveSpeed Seedance settings */
+                            <div className="space-y-3">
+                              {/* Duration selector - 5s and 10s */}
+                              <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground">Duration</Label>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {SEEDANCE_WS_DURATIONS.map((d) => (
+                                    <button
+                                      key={d}
+                                      onClick={() => setSeedanceDuration(d)}
+                                      className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                        seedanceDuration === d
+                                          ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/20'
+                                          : 'bg-white/5 border border-white/10 text-muted-foreground hover:border-emerald-500/30 hover:text-foreground'
+                                      }`}
+                                    >
+                                      {d}s
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              {/* Resolution - Fixed 480p */}
+                              <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground">Resolution</Label>
+                                <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-muted-foreground">
+                                  480p · Fixed
+                                </div>
+                              </div>
+
+                              {/* Web Search toggle */}
+                              <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
+                                <div>
+                                  <span className="text-xs text-muted-foreground">Web Search</span>
+                                  <p className="text-[10px] text-muted-foreground/60">Use online search for reference</p>
+                                </div>
+                                <button
+                                  onClick={() => setSeedanceWebSearch(!seedanceWebSearch)}
+                                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                                    seedanceWebSearch ? 'bg-emerald-500' : 'bg-white/20'
+                                  }`}
+                                >
+                                  <span
+                                    className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
+                                      seedanceWebSearch ? 'translate-x-4' : 'translate-x-0.5'
+                                    }`}
+                                  />
+                                </button>
+                              </div>
+
+                              {/* Reference Video URLs */}
+                              <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                  🎬 Reference Videos
+                                  <span className="text-[10px] text-muted-foreground/60">(URL · max 3)</span>
+                                </Label>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="url"
+                                    placeholder="https://example.com/video.mp4"
+                                    value={seedanceRefVideoInput}
+                                    onChange={(e) => setSeedanceRefVideoInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && seedanceRefVideoInput.trim()) {
+                                        if (seedanceRefVideoUrls.length >= 3) {
+                                          toast.error('Maximum 3 reference videos')
+                                          return
+                                        }
+                                        try {
+                                          new URL(seedanceRefVideoInput.trim())
+                                          setSeedanceRefVideoUrls(prev => [...prev, seedanceRefVideoInput.trim()])
+                                          setSeedanceRefVideoInput('')
+                                        } catch { toast.error('Invalid URL') }
+                                      }
+                                    }}
+                                    className="flex-1 h-9 px-3 rounded-lg bg-white/5 border border-white/10 text-xs placeholder:text-muted-foreground/40 focus:border-emerald-500/50 focus:outline-none"
+                                  />
+                                  <button
+                                    onClick={() => {
+                                      if (!seedanceRefVideoInput.trim()) return
+                                      if (seedanceRefVideoUrls.length >= 3) {
+                                        toast.error('Maximum 3 reference videos')
+                                        return
+                                      }
+                                      try {
+                                        new URL(seedanceRefVideoInput.trim())
+                                        setSeedanceRefVideoUrls(prev => [...prev, seedanceRefVideoInput.trim()])
+                                        setSeedanceRefVideoInput('')
+                                      } catch { toast.error('Invalid URL') }
+                                    }}
+                                    disabled={!seedanceRefVideoInput.trim()}
+                                    className="h-9 px-3 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs hover:bg-emerald-500/30 transition-colors disabled:opacity-40"
+                                  >Add</button>
+                                </div>
+                                {seedanceRefVideoUrls.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {seedanceRefVideoUrls.map((url, i) => (
+                                      <span key={i} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/5 border border-white/10 text-[10px] text-muted-foreground max-w-[180px] truncate">
+                                        {url}
+                                        <button onClick={() => setSeedanceRefVideoUrls(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-300 shrink-0">
+                                          ✕
+                                        </button>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Reference Audio URLs */}
+                              <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                  🎵 Reference Audio
+                                  <span className="text-[10px] text-muted-foreground/60">(URL · max 3)</span>
+                                </Label>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="url"
+                                    placeholder="https://example.com/audio.mp3"
+                                    value={seedanceRefAudioInput}
+                                    onChange={(e) => setSeedanceRefAudioInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && seedanceRefAudioInput.trim()) {
+                                        if (seedanceRefAudioUrls.length >= 3) {
+                                          toast.error('Maximum 3 reference audios')
+                                          return
+                                        }
+                                        try {
+                                          new URL(seedanceRefAudioInput.trim())
+                                          setSeedanceRefAudioUrls(prev => [...prev, seedanceRefAudioInput.trim()])
+                                          setSeedanceRefAudioInput('')
+                                        } catch { toast.error('Invalid URL') }
+                                      }
+                                    }}
+                                    className="flex-1 h-9 px-3 rounded-lg bg-white/5 border border-white/10 text-xs placeholder:text-muted-foreground/40 focus:border-emerald-500/50 focus:outline-none"
+                                  />
+                                  <button
+                                    onClick={() => {
+                                      if (!seedanceRefAudioInput.trim()) return
+                                      if (seedanceRefAudioUrls.length >= 3) {
+                                        toast.error('Maximum 3 reference audios')
+                                        return
+                                      }
+                                      try {
+                                        new URL(seedanceRefAudioInput.trim())
+                                        setSeedanceRefAudioUrls(prev => [...prev, seedanceRefAudioInput.trim()])
+                                        setSeedanceRefAudioInput('')
+                                      } catch { toast.error('Invalid URL') }
+                                    }}
+                                    disabled={!seedanceRefAudioInput.trim()}
+                                    className="h-9 px-3 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs hover:bg-emerald-500/30 transition-colors disabled:opacity-40"
+                                  >Add</button>
+                                </div>
+                                {seedanceRefAudioUrls.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {seedanceRefAudioUrls.map((url, i) => (
+                                      <span key={i} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/5 border border-white/10 text-[10px] text-muted-foreground max-w-[180px] truncate">
+                                        {url}
+                                        <button onClick={() => setSeedanceRefAudioUrls(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-300 shrink-0">
+                                          ✕
+                                        </button>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           ) : isVeoModel || isKlingModel || isGptImage2Model ? null : (
                             <div className="space-y-2">
                               <Label className="text-xs text-muted-foreground">Resolution</Label>
@@ -1422,7 +1607,7 @@ export function GeneratePage() {
                               value={
                                 isVeoModel ? (aspectRatio || '16:9') :
                                 isSora2Model ? (aspectRatio === 'portrait' || aspectRatio === 'landscape' ? aspectRatio : 'landscape') :
-                                isSeedanceModel ? (aspectRatio || '16:9') :
+                                isSeedanceModel || isSeedanceWsModel ? (aspectRatio || '16:9') :
                                 isKlingModel ? (aspectRatio || '16:9') :
                                 isGptImage2Model ? (aspectRatio || '1:1') :
                                 aspectRatio
@@ -1435,7 +1620,7 @@ export function GeneratePage() {
                               <SelectContent>
                                 {(isVeoModel
                                   ? VEO_ASPECT_RATIOS
-                                  : isSora2Model ? SORA2_ASPECT_RATIOS : isSeedanceModel ? SEEDANCE_ASPECT_RATIOS : isKlingModel ? KLING_ASPECT_RATIOS : isGptImage2Model ? GPT_IMAGE2_ASPECT_RATIOS : ASPECT_RATIOS
+                                  : isSora2Model ? SORA2_ASPECT_RATIOS : (isSeedanceModel || isSeedanceWsModel) ? SEEDANCE_ASPECT_RATIOS : isKlingModel ? KLING_ASPECT_RATIOS : isGptImage2Model ? GPT_IMAGE2_ASPECT_RATIOS : ASPECT_RATIOS
                                 ).map((ratio) => (
                                   <SelectItem key={ratio} value={ratio}>
                                     {ratio === 'portrait' ? '📱 Portrait' : ratio === 'landscape' ? '🖥️ Landscape' : ratio === 'Auto' ? '🔄 Auto' : ratio === 'adaptive' ? '🔄 Adaptive' : ratio === '16:9' ? '🖥️ 16:9 Landscape' : ratio === '9:16' ? '📱 9:16 Portrait' : ratio === '1:1' ? '⬜ 1:1 Square' : ratio}

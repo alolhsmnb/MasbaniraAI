@@ -19,6 +19,14 @@ const DEFAULT_MODELS = [
     isActive: true,
     sortOrder: 0,
   },
+  {
+    modelId: 'bytedance/seedance-2.0-fast/text-to-video',
+    name: 'Seedance 2.0 Fast (WaveSpeed)',
+    type: 'VIDEO',
+    provider: 'WAVESPEED',
+    isActive: true,
+    sortOrder: 0,
+  },
 ]
 
 const DEFAULT_SETTINGS: Record<string, string> = {

@@ -9,13 +9,16 @@ interface WavespeedCreateInput {
   aspectRatio?: string
   duration?: number
   imageInput?: string[]
-  images?: string[] // For GPT Image 2 Edit (array of image URLs)
+  images?: string[] // For GPT Image 2 Edit, Seedance WS reference_images
   cfgScale?: number
   sound?: boolean
   shotType?: string
   endImage?: string
   quality?: string // GPT Image 2: low, medium, high
-  resolution?: string // GPT Image 2: 1k, 2k, 4k
+  resolution?: string // GPT Image 2: 1k, 2k, 4k / Seedance WS: 480p
+  reference_audios?: string[] // Seedance WS: reference audio URLs
+  reference_videos?: string[] // Seedance WS: reference video URLs
+  enable_web_search?: boolean // Seedance WS: enable web search
   webhookUrl?: string
 }
 
@@ -151,6 +154,10 @@ export async function createWavespeedTask(
   // GPT Image 2 params
   if (input.quality) body.quality = input.quality
   if (input.resolution) body.resolution = input.resolution
+  // Seedance WS params
+  if (input.reference_audios && input.reference_audios.length > 0) body.reference_audios = input.reference_audios
+  if (input.reference_videos && input.reference_videos.length > 0) body.reference_videos = input.reference_videos
+  if (input.enable_web_search) body.enable_web_search = true
   // Kling models require element_list and multi_prompt
   if (input.model.includes('kling')) {
     body.element_list = []
