@@ -75,18 +75,17 @@ const SORA2_FRAMES = ['10', '15']
 const SEEDANCE_ASPECT_RATIOS = ['16:9', '1:1', '4:3', '3:4', '9:16', '21:9', 'adaptive']
 const SEEDANCE_RESOLUTIONS = ['480p', '720p']
 // Seedance 2.0 Fast WaveSpeed — 480p only, 5s and 10s
+const SEEDANCE_WS_MODEL = 'bytedance/seedance-2.0-fast/text-to-video'
 const SEEDANCE_WS_DURATIONS = [5, 10]
 
 // Models that support image input (optional)
 const IMAGE_INPUT_MODELS = ['nano-banana-pro', 'nano-banana-2', 'veo3', 'veo3_fast', 'veo3_lite', SEEDANCE_WS_MODEL]
 // Seedance models (support image input for frames/references)
 const SEEDANCE_MODELS = ['bytedance/seedance-2-fast']
-// WaveSpeed Seedance
-const SEEDANCE_WS_MODEL = 'bytedance/seedance-2.0-fast/text-to-video'
 // Models that require image input
 const IMAGE_REQUIRED_MODELS = ['grok-imagine/image-to-image', 'grok-imagine/image-to-video', 'sora-2-image-to-video']
 // Video models
-const VIDEO_MODELS = ['grok-imagine/text-to-video', 'grok-imagine/image-to-video', 'sora-2-text-to-video', 'sora-2-image-to-video', 'veo3', 'veo3_fast', 'veo3_lite', 'bytedance/seedance-2-fast', 'bytedance/seedance-2.0-fast/text-to-video']
+const VIDEO_MODELS = ['grok-imagine/text-to-video', 'grok-imagine/image-to-video', 'sora-2-text-to-video', 'sora-2-image-to-video', 'veo3', 'veo3_fast', 'veo3_lite', 'bytedance/seedance-2-fast', SEEDANCE_WS_MODEL]
 // Sora2 models (use n_frames instead of duration, portrait/landscape instead of ratios)
 const SORA2_MODELS = ['sora-2-text-to-video', 'sora-2-image-to-video']
 const VEO_MODELS = ['veo3', 'veo3_fast', 'veo3_lite']
