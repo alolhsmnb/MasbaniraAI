@@ -31,6 +31,66 @@ async function getWavespeedKeys(): Promise<{ id: string; key: string; name: stri
 }
 
 /**
+ * Fetch webhook secret for a specific WaveSpeed API key
+ * GET https://api.wavespeed.ai/api/v3/webhook/secret
+ */
+export async function fetchWebhookSecret(apiKey: string): Promise<string | null> {
+  try {
+    const response = await fetch(`${WAVESPEED_BASE_URL}/api/v3/webhook/secret`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    })
+    if (!response.ok) {
+      console.warn(`[WaveSpeed] Failed to fetch webhook secret: ${response.status}`)
+      return null
+    }
+    const data = await response.json()
+    // Response: { code: 200, data: { secret: "whsec_..." } }
+    const secret = data?.data?.secret || data?.secret || data?.data
+    if (typeof secret === 'string' && secret.length > 0) {
+      return secret
+    }
+    console.warn(`[WaveSpeed] Unexpected webhook secret response format:`, JSON.stringify(data).substring(0, 200))
+    return null
+  } catch (err) {
+    console.error('[WaveSpeed] Error fetching webhook secret:', err)
+    return null
+  }
+}
+
+/**
+ * Fetch webhook secrets for all active WaveSpeed keys (with cache)
+ */
+const webhookSecretCache: Map<string, { secret: string; fetchedAt: number }> = new Map()
+const WEBHOOK_SECRET_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+export async function fetchAllWebhookSecrets(): Promise<string[]> {
+  const keys = await getWavespeedKeys()
+  if (keys.length === 0) return []
+
+  const secrets: string[] = []
+  for (const apiKey of keys) {
+    // Check cache
+    const cached = webhookSecretCache.get(apiKey.key)
+    if (cached && Date.now() - cached.fetchedAt < WEBHOOK_SECRET_CACHE_TTL) {
+      secrets.push(cached.secret)
+      continue
+    }
+
+    // Fetch fresh
+    const secret = await fetchWebhookSecret(apiKey.key)
+    if (secret) {
+      webhookSecretCache.set(apiKey.key, { secret, fetchedAt: Date.now() })
+      secrets.push(secret)
+    }
+  }
+
+  return secrets
+}
+
+/**
  * Check if a WaveSpeed error means key has no credits (should try next key)
  */
 function isRetryableError(errorMsg: string): boolean {

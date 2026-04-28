@@ -2,11 +2,21 @@ import crypto from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { extractResultUrl } from '@/lib/kie-api'
+import { fetchAllWebhookSecrets } from '@/lib/wavespeed-api'
 
 // ============================================================
 // WaveSpeed HMAC-SHA256 webhook signature verification
 // ============================================================
-function verifyWaveSpeedSignature(rawBuffer: Buffer, headers: Headers, secret: string): boolean {
+function computeSignature(rawBuffer: Buffer, webhookId: string, timestamp: string, hmacKey: string): string {
+  const prefix = Buffer.from(`${webhookId}.${timestamp}.`)
+  const signedContent = Buffer.concat([prefix, rawBuffer])
+  return crypto
+    .createHmac('sha256', hmacKey)
+    .update(signedContent)
+    .digest('hex')
+}
+
+async function verifyWaveSpeedSignature(rawBuffer: Buffer, headers: Headers): Promise<boolean> {
   try {
     const webhookId = headers.get('webhook-id')
     const timestamp = headers.get('webhook-timestamp')
@@ -28,48 +38,32 @@ function verifyWaveSpeedSignature(rawBuffer: Buffer, headers: Headers, secret: s
       return false
     }
 
-    // Use raw bytes directly — no string decoding that might normalize characters
-    const prefix = Buffer.from(`${webhookId}.${timestamp}.`)
-    const signedContent = Buffer.concat([prefix, rawBuffer])
+    // Fetch webhook secrets from WaveSpeed API for all active keys
+    const secrets = await fetchAllWebhookSecrets()
+    if (secrets.length === 0) {
+      console.log('[Webhook/SigDebug] No webhook secrets fetched from API')
+      return false
+    }
 
-    // Try BOTH: with and without whsec_ prefix
-    const keyWithPrefix = secret
-    const keyWithoutPrefix = secret.startsWith('whsec_') ? secret.slice(6) : `whsec_${secret}`
+    console.log(`[Webhook/SigDebug] Testing ${secrets.length} webhook secret(s)`)
 
-    const expectedWithPrefix = crypto
-      .createHmac('sha256', keyWithPrefix)
-      .update(signedContent)
-      .digest('hex')
+    for (const secret of secrets) {
+      // Try with whsec_ prefix removed (per docs)
+      const key1 = secret.startsWith('whsec_') ? secret.slice(6) : secret
+      // Try with full secret
+      const key2 = secret
 
-    const expectedWithoutPrefix = crypto
-      .createHmac('sha256', keyWithoutPrefix)
-      .update(signedContent)
-      .digest('hex')
+      for (const [label, hmacKey] of [['stripped', key1], ['full', key2]]) {
+        const expected = computeSignature(rawBuffer, webhookId, timestamp, hmacKey)
+        if (expected === receivedSignature) {
+          console.log(`[Webhook/SigDebug] ✅ MATCH secret "${secret.substring(0, 15)}..." variant=${label}`)
+          return true
+        }
+      }
+    }
 
+    console.log(`[Webhook/SigDebug] ❌ No secret matched (tried ${secrets.length} secrets)`)
     console.log(`[Webhook/SigDebug] received=${receivedSignature}`)
-    console.log(`[Webhook/SigDebug] withPrefix(full secret)=${expectedWithPrefix}`)
-    console.log(`[Webhook/SigDebug] withoutPrefix(stripped whsec_)=${expectedWithoutPrefix}`)
-    console.log(`[Webhook/SigDebug] stored secret="${secret.substring(0, 15)}...${secret.substring(secret.length - 5)}"`)
-
-    if (expectedWithPrefix === receivedSignature) {
-      console.log(`[Webhook/SigDebug] ✅ MATCH using full secret (WITH whsec_ prefix)`)
-      return true
-    }
-
-    if (expectedWithoutPrefix === receivedSignature) {
-      console.log(`[Webhook/SigDebug] ✅ MATCH using secret without whsec_ prefix`)
-      return true
-    }
-
-    // Also try raw string body
-    const stringBody = rawBuffer.toString('utf-8')
-    const stringContent = `${webhookId}.${timestamp}.${stringBody}`
-    const expectedString = crypto.createHmac('sha256', keyWithoutPrefix).update(stringContent).digest('hex')
-    const expectedStringFull = crypto.createHmac('sha256', keyWithPrefix).update(stringContent).digest('hex')
-    console.log(`[Webhook/SigDebug] stringMode stripped=${expectedString} match?${expectedString === receivedSignature}`)
-    console.log(`[Webhook/SigDebug] stringMode full=${expectedStringFull} match?${expectedStringFull === receivedSignature}`)
-
-    console.log(`[Webhook/SigDebug] ❌ No key variant matched`)
     return false
   } catch (err) {
     console.error('[Webhook/SigDebug] Verification error:', err)
@@ -296,19 +290,14 @@ export async function POST(request: NextRequest) {
     if (provider === 'WAVESPEED') {
       // Verify WaveSpeed HMAC signature (warning only, never block)
       try {
-        const setting = await db.siteSetting.findUnique({ where: { key: 'wavespeed_webhook_secret' } })
-        if (setting?.value) {
-          const valid = verifyWaveSpeedSignature(rawBuffer, request.headers, setting.value)
-          if (!valid) {
-            console.warn('[Webhook/WaveSpeed] ⚠️ Signature mismatch (processing anyway)')
-          } else {
-            console.log('[Webhook/WaveSpeed] ✅ Signature verified')
-          }
+        const valid = await verifyWaveSpeedSignature(rawBuffer, request.headers)
+        if (!valid) {
+          console.warn('[Webhook/WaveSpeed] ⚠️ Signature mismatch (processing anyway)')
         } else {
-          console.log('[Webhook/WaveSpeed] No stored secret — skipping verification')
+          console.log('[Webhook/WaveSpeed] ✅ Signature verified')
         }
       } catch {
-        console.log('[Webhook/WaveSpeed] Could not verify signature (DB error), processing anyway')
+        console.log('[Webhook/WaveSpeed] Could not verify signature, processing anyway')
       }
 
       const result = await handleWaveSpeedCallback(payload)
