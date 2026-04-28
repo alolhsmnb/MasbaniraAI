@@ -42,6 +42,7 @@ model AiModel {
   modelId   String        @unique
   name      String
   type      String        @default("IMAGE")
+  provider  String        @default("KIE")
   logoUrl   String?
   isActive  Boolean       @default(true)
   sortOrder Int           @default(0)
