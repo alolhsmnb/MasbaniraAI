@@ -203,6 +203,20 @@ export function getDefaultPricing(modelType: string, modelModelId: string) {
   const isSeedance = modelModelId === 'bytedance/seedance-2-fast'
   // Kling models: pricing by duration only
   const isKling = modelModelId.startsWith('kwaivgi/kling')
+  // GPT Image 2: pricing by resolution × quality
+  const isGptImage2 = modelModelId.startsWith('openai/gpt-image-2')
+
+  if (isGptImage2) {
+    // GPT Image 2: resolution × quality matrix
+    return {
+      format: 'resolution_quality',
+      tiers: {
+        '1k': { 'low': 1, 'medium': 2, 'high': 3 },
+        '2k': { 'low': 2, 'medium': 3, 'high': 5 },
+        '4k': { 'low': 3, 'medium': 5, 'high': 8 },
+      },
+    }
+  }
 
   if (modelType === 'IMAGE') {
     return {

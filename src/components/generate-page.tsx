@@ -252,11 +252,21 @@ export function GeneratePage() {
     if (format === 'frames') {
       return Math.max(1, parseInt(String(tiers[soraFrames])) || 1)
     }
+    if (format === 'resolution_quality') {
+      // GPT Image 2: resolution × quality matrix
+      const res = gptImage2Resolution || '1k'
+      const quality = gptImage2Quality || 'medium'
+      const resTier = tiers[res]
+      if (resTier && typeof resTier === 'object') {
+        return Math.max(1, parseInt(String(resTier[quality])) || 1)
+      }
+      return 1
+    }
     if (format === 'flat') {
       return Math.max(1, parseInt(String(tiers.default)) || 1)
     }
     return 1
-  }, [models, selectedModel, imageSize, videoDuration, videoResolution, soraFrames, isKlingModel, klingDuration, isGptImage2Model, gptImage2Resolution])
+  }, [models, selectedModel, imageSize, videoDuration, videoResolution, soraFrames, isKlingModel, klingDuration, isGptImage2Model, gptImage2Resolution, gptImage2Quality])
 
   // Reset aspect ratio when switching to Veo/Seedance/Kling model
   const handleModelChange = useCallback((modelId: string) => {

@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     await requireAdmin(request)
 
     const body = await request.json()
-    const { modelId, name, type, logoUrl, isActive, sortOrder } = body || {}
+    const { modelId, name, type, logoUrl, isActive, sortOrder, provider } = body || {}
 
     if (!modelId || !name) {
       return NextResponse.json(
@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
         logoUrl: logoUrl || null,
         isActive: isActive !== false,
         sortOrder: sortOrder || 0,
+        provider: provider || 'KIE',
       },
     })
 

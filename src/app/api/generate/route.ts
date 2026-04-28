@@ -69,7 +69,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate cost based on model pricing
-    const cost = calculateCost(model, { imageSize, duration, nFrames })
+    const modelProvider = model.provider || 'KIE'
+    const isGptImage2 = modelProvider === 'WAVESPEED' && model.modelId.startsWith('openai/gpt-image-2')
+    const cost = calculateCost(model, {
+      imageSize,
+      duration,
+      nFrames,
+      gptImage2Resolution: isGptImage2 ? gptImage2Resolution : undefined,
+      gptImage2Quality: isGptImage2 ? gptImage2Quality : undefined,
+    })
     const totalCredits = user.dailyCredits + user.paidCredits
 
     if (totalCredits < cost) {
@@ -99,9 +107,8 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Call the correct provider API based on model's provider
+    // Call the correct provider API based on model's provider (already defined above)
     let taskResult: { taskId: string; apiKeyId: string }
-    const modelProvider = model.provider || 'KIE'
 
     if (modelProvider === 'WAVESPEED') {
       // WaveSpeed.AI provider (Kling + GPT Image 2 models)
@@ -435,7 +442,7 @@ async function refundCredits(userId: string, amount: number) {
 // Helper: Calculate cost based on model pricing configuration
 function calculateCost(
   model: { modelId: string; type: string; pricing: { pricingJson: string } | null },
-  options: { imageSize?: string; duration?: number; nFrames?: string }
+  options: { imageSize?: string; duration?: number; nFrames?: string; gptImage2Resolution?: string; gptImage2Quality?: string }
 ): number {
   const defaultCost = 1
 
@@ -480,6 +487,17 @@ function calculateCost(
       // Sora2 models: key is frame count
       const frames = options.nFrames || '10'
       return Math.max(1, parseInt(String(tiers[frames])) || defaultCost)
+    }
+
+    if (format === 'resolution_quality') {
+      // GPT Image 2: resolution × quality matrix
+      const res = options.gptImage2Resolution || '1k'
+      const quality = options.gptImage2Quality || 'medium'
+      const resTier = tiers[res]
+      if (resTier && typeof resTier === 'object') {
+        return Math.max(1, parseInt(String(resTier[quality])) || defaultCost)
+      }
+      return defaultCost
     }
 
     if (format === 'flat') {

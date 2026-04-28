@@ -201,6 +201,7 @@ export function ModelsTab() {
   }
 
   const getPricingFormType = (model: any) => {
+    if (model.modelId.startsWith('openai/gpt-image-2')) return 'resolution_quality'
     if (model.type === 'IMAGE') return 'resolution'
     if (model.modelId.startsWith('sora-2')) return 'frames'
     if (model.modelId.startsWith('veo3') || model.modelId === 'bytedance/seedance-2-fast') return 'flat'
@@ -560,6 +561,59 @@ export function ModelsTab() {
                         </TableBody>
                       </Table>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {getPricingFormType(pricingModel) === 'resolution_quality' && (
+                /* GPT Image 2 - Resolution × Quality matrix */
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Resolution &times; Quality credit matrix</p>
+                  <div className="glass-card overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-20">Resolution</TableHead>
+                          <TableHead className="text-center">Low</TableHead>
+                          <TableHead className="text-center">Medium</TableHead>
+                          <TableHead className="text-center">High</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {Object.entries(pricingForm.tiers).map(([resolution, qualities]: [string, any]) => (
+                          <TableRow key={resolution}>
+                            <TableCell className="font-medium">{resolution.toUpperCase()}</TableCell>
+                            <TableCell className="text-center">
+                              <Input
+                                type="number"
+                                min={0}
+                                value={qualities?.['low'] || 0}
+                                onChange={(e) => updateTierValue(resolution, 'low', parseInt(e.target.value) || 0)}
+                                className="w-20 mx-auto text-center"
+                              />
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Input
+                                type="number"
+                                min={0}
+                                value={qualities?.['medium'] || 0}
+                                onChange={(e) => updateTierValue(resolution, 'medium', parseInt(e.target.value) || 0)}
+                                className="w-20 mx-auto text-center"
+                              />
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Input
+                                type="number"
+                                min={0}
+                                value={qualities?.['high'] || 0}
+                                onChange={(e) => updateTierValue(resolution, 'high', parseInt(e.target.value) || 0)}
+                                className="w-20 mx-auto text-center"
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
                 </div>
               )}
