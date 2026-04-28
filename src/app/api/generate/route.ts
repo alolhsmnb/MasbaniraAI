@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth, AuthError } from '@/lib/auth'
 import { createTask, createVeoTask } from '@/lib/kie-api'
+import { createWavespeedTask, checkWavespeedTaskStatus, extractWavespeedResultUrl } from '@/lib/wavespeed-api'
 import { getDefaultPricing } from '@/app/api/admin/pricing/route'
 
 export async function POST(request: NextRequest) {
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json()
-    const { modelId, prompt, aspectRatio, imageSize, rotation, type, imageInput, outputFormat, mode, duration, nFrames, removeWatermark, enableTranslation, watermark, seedanceFirstFrameUrl, seedanceLastFrameUrl, seedanceReferenceImageUrls, seedanceReferenceVideoUrls, seedanceReferenceAudioUrls, seedanceResolution, seedanceGenerateAudio, seedanceWebSearch } = body || {}
+    const { modelId, prompt, aspectRatio, imageSize, rotation, type, imageInput, outputFormat, mode, duration, nFrames, removeWatermark, enableTranslation, watermark, seedanceFirstFrameUrl, seedanceLastFrameUrl, seedanceReferenceImageUrls, seedanceReferenceVideoUrls, seedanceReferenceAudioUrls, seedanceResolution, seedanceGenerateAudio, seedanceWebSearch, negativePrompt, klingCfgScale, klingSound, klingShotType } = body || {}
 
     if (!modelId) {
       return NextResponse.json(
@@ -58,8 +59,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Prompt is optional only for grok image-to-video
-    const isImageToVideoOptionalPrompt = model.modelId === 'grok-imagine/image-to-video'
+    // Prompt is optional only for image-to-video models
+    const isImageToVideoOptionalPrompt = model.modelId === 'grok-imagine/image-to-video' || model.modelId === 'kwaivgi/kling-v3.0-std/image-to-video'
     if (!prompt?.trim() && !isImageToVideoOptionalPrompt) {
       return NextResponse.json(
         { success: false, error: 'Prompt is required' },
@@ -98,10 +99,32 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Call KIE.AI API - Veo uses a different endpoint
+    // Call the correct provider API based on model's provider
     let taskResult: { taskId: string; apiKeyId: string }
+    const modelProvider = model.provider || 'KIE'
 
-    if (model.modelId.startsWith('veo3')) {
+    if (modelProvider === 'WAVESPEED') {
+      // WaveSpeed.AI provider (Kling models)
+      const isKlingImg2Vid = model.modelId === 'kwaivgi/kling-v3.0-std/image-to-video'
+      // Build webhook URL dynamically from request headers
+      const host = request.headers.get('host') || ''
+      const protocol = request.headers.get('x-forwarded-proto') || 'https'
+      const webhookUrl = host ? `${protocol}://${host}/api/generate/callback` : undefined
+      console.log(`[Generate] WaveSpeed webhook URL: ${webhookUrl || '(not set)'}`)
+
+      taskResult = await createWavespeedTask({
+        model: model.modelId,
+        prompt: prompt.trim() || undefined,
+        negativePrompt: negativePrompt || undefined,
+        aspectRatio: isKlingImg2Vid ? undefined : aspectRatio,
+        duration: duration ? parseInt(String(duration)) : undefined,
+        imageInput: isKlingImg2Vid && imageInput && imageInput.length > 0 ? imageInput : undefined,
+        cfgScale: klingCfgScale !== undefined ? klingCfgScale : undefined,
+        sound: klingSound !== undefined ? klingSound : undefined,
+        shotType: klingShotType || undefined,
+        webhookUrl,
+      })
+    } else if (model.modelId.startsWith('veo3')) {
       // Veo 3.1 (Quality / Fast / Lite) - uses /api/v1/veo/generate endpoint
       console.log(`[Generate] Veo model detected: ${model.modelId}, imageSize=${imageSize}, aspectRatio=${aspectRatio}, enableTranslation=${enableTranslation}`)
       taskResult = await createVeoTask({
@@ -178,7 +201,9 @@ export async function POST(request: NextRequest) {
       }
 
       if (imageInput && Array.isArray(imageInput) && imageInput.length > 0) {
-        if (model.modelId.includes('image-to-image') || model.modelId.includes('image-to-video')) {
+        if (model.modelId === 'gpt-image-2-image-to-image') {
+          taskInput.input_urls = imageInput
+        } else if (model.modelId.includes('image-to-image') || model.modelId.includes('image-to-video')) {
           taskInput.image_urls = imageInput
         } else {
           taskInput.image_input = imageInput
@@ -225,6 +250,57 @@ export async function POST(request: NextRequest) {
         cost,
       },
     })
+
+    // WaveSpeed fallback: after() runs server-side AFTER response is sent.
+    // No client polling. If webhook didn't arrive, check once via API.
+    if (modelProvider === 'WAVESPEED') {
+      const fallbackTaskId = taskResult.taskId
+      const fallbackGenId = generation.id
+      const fallbackUserId = user.id
+      const fallbackCost = cost
+      // Dynamic wait based on video duration
+      const videoDuration = duration ? parseInt(String(duration)) : 5
+      const waitMs = Math.max(90_000, videoDuration * 20_000)
+      after(async () => {
+        try {
+          console.log(`[WaveSpeed Fallback] Waiting ${waitMs / 1000}s for task ${fallbackTaskId} (video=${videoDuration}s)`)
+          await new Promise(r => setTimeout(r, waitMs))
+          const gen = await db.generation.findUnique({ where: { id: fallbackGenId } })
+          if (!gen || gen.status !== 'PROCESSING') {
+            console.log(`[WaveSpeed Fallback] Task ${fallbackTaskId} already ${gen?.status || 'gone'}, skip`)
+            return
+          }
+          const keys = await db.apiKey.findMany({ where: { isActive: true, provider: 'WAVESPEED' }, orderBy: { createdAt: 'asc' } })
+          if (keys.length === 0) {
+            console.warn(`[WaveSpeed Fallback] No active keys, skip`)
+            return
+          }
+          console.log(`[WaveSpeed Fallback] Checking task ${fallbackTaskId}...`)
+          const result = await checkWavespeedTaskStatus(fallbackTaskId, keys[0].key)
+          if (result.state === 'SUCCEED') {
+            const url = extractWavespeedResultUrl(result.result)
+            await db.generation.update({
+              where: { id: fallbackGenId },
+              data: { status: 'COMPLETED', resultUrl: url || result.resultJson || '' },
+            })
+            console.log(`[WaveSpeed Fallback] ✓ Task ${fallbackTaskId} completed, url=${url || '(none)'}`)
+          } else if (result.state === 'FAILED') {
+            if (fallbackCost > 0) {
+              try { await db.user.update({ where: { id: fallbackUserId }, data: { paidCredits: { increment: fallbackCost } } }) } catch { /* ignore */ }
+            }
+            await db.generation.update({
+              where: { id: fallbackGenId },
+              data: { status: 'FAILED', resultUrl: 'Generation failed at provider' },
+            })
+            console.log(`[WaveSpeed Fallback] ✗ Task ${fallbackTaskId} failed, refunded ${fallbackCost} credits`)
+          } else {
+            console.log(`[WaveSpeed Fallback] Task ${fallbackTaskId} still running (${result.status})`)
+          }
+        } catch (err) {
+          console.error(`[WaveSpeed Fallback] Error for task ${fallbackTaskId}:`, err)
+        }
+      })
+    }
 
     return NextResponse.json({
       success: true,

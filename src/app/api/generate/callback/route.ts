@@ -1,194 +1,131 @@
+import crypto from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { extractResultUrl, isTaskCompleted, isTaskFailed } from '@/lib/kie-api'
 
-/**
- * KIE.AI Callback Webhook
- * 
- * KIE.AI POSTs task results here when generation completes.
- * 
- * Flow:
- * 1. KIE.AI sends callback with task result
- * 2. We extract the result URL and update the database
- * 3. Supabase Realtime automatically pushes the change to the frontend
- * 4. The generate page instantly shows the result — no polling needed
- * 
- * Expected payload structure:
- * {
- *   taskId: string,
- *   state: "success" | "failed",
- *   resultJson: '{"resultUrls":["https://..."]}',  // JSON string
- *   ...other fields
- * }
- * 
- * Or via data wrapper:
- * {
- *   data: { taskId, state, resultJson, ... }
- * }
- */
+function verifyWebhook(rawBody: string, headers: Headers, secret: string): boolean {
+  try {
+    const webhookId = headers.get('webhook-id')
+    const timestamp = headers.get('webhook-timestamp')
+    const signatureHeader = headers.get('webhook-signature')
+
+    if (!webhookId || !timestamp || !signatureHeader) {
+      console.log('[Webhook] No signature headers — skipping verification')
+      return true
+    }
+
+    const [version, receivedSignature] = signatureHeader.split(',')
+    if (version !== 'v3') {
+      console.warn(`[Webhook] Unknown signature version: ${version}`)
+      return false
+    }
+
+    const signedContent = `${webhookId}.${timestamp}.${rawBody}`
+    const key = secret.startsWith('whsec_') ? secret.slice(6) : secret
+    const expectedSignature = crypto
+      .createHmac('sha256', key)
+      .update(signedContent)
+      .digest('hex')
+
+    if (Math.abs(Date.now() / 1000 - parseInt(timestamp)) > 300) {
+      console.warn('[Webhook] Timestamp too old')
+      return false
+    }
+
+    return crypto.timingSafeEqual(
+      Buffer.from(expectedSignature),
+      Buffer.from(receivedSignature)
+    )
+  } catch (err) {
+    console.error('[Webhook] Verification error:', err)
+    return false
+  }
+}
+
+export async function GET() {
+  return NextResponse.json({ status: 'ok' })
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    const rawBody = await request.text()
+    console.log('[Webhook] === RECEIVED ===', rawBody.substring(0, 500))
 
-    console.log('[Callback] Received KIE.AI callback:', JSON.stringify(body).substring(0, 2000))
+    const payload = JSON.parse(rawBody) as Record<string, unknown>
 
-    // Extract taskId - could be at top level or nested in data
-    const taskId = body.taskId || body.data?.taskId || body.id
-
-    if (!taskId) {
-      console.error('[Callback] No taskId found in callback body:', JSON.stringify(body).substring(0, 500))
-      return NextResponse.json(
-        { success: true, message: 'No taskId found' },
-        { status: 200 }
-      )
+    // Try to verify signature if we have a stored secret
+    try {
+      const setting = await db.siteSetting.findUnique({ where: { key: 'wavespeed_webhook_secret' } })
+      if (setting?.value) {
+        const valid = verifyWebhook(rawBody, request.headers, setting.value)
+        if (!valid) {
+          console.warn('[Webhook] ❌ Invalid signature')
+          return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+        }
+        console.log('[Webhook] ✅ Signature verified')
+      } else {
+        console.log('[Webhook] No stored secret — skipping verification')
+      }
+    } catch {
+      console.log('[Webhook] Could not verify signature (DB error), processing anyway')
     }
 
-    // Find the generation record
-    const generation = await db.generation.findFirst({
-      where: { taskId },
-    })
+    const taskId = String(payload.id || '')
+    const status = String(payload.status || '')
+    const outputs = payload.outputs as unknown[] | undefined
+    const error = String(payload.error || '')
+
+    if (!taskId || !status) {
+      console.warn('[Webhook] Missing id or status in payload')
+      return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+    }
+
+    console.log(`[Webhook] Task=${taskId} Status=${status} Outputs=${outputs?.length || 0}`)
+
+    const generation = await db.generation.findFirst({ where: { taskId } })
 
     if (!generation) {
-      console.error(`[Callback] No generation found for taskId: ${taskId}`)
-      return NextResponse.json(
-        { success: true, message: 'Generation not found' },
-        { status: 200 }
-      )
+      console.warn(`[Webhook] No generation for taskId=${taskId}`)
+      return NextResponse.json({ success: true })
     }
 
-    // Skip if already completed or failed
     if (generation.status === 'COMPLETED' || generation.status === 'FAILED') {
-      console.log(`[Callback] Generation ${taskId} already ${generation.status}, skipping`)
-      return NextResponse.json({ success: true, message: 'Already processed' })
+      console.log(`[Webhook] Task ${taskId} already ${generation.status}, skip`)
+      return NextResponse.json({ success: true })
     }
 
-    // Determine status - check both state/status fields AND top-level code (Veo uses code)
-    const callbackData = body.data || body
-    const callbackCode = body.code || callbackData.code
-    const stateOrStatus = callbackData.state || callbackData.status || body.state || body.status || ''
-
-    // Veo-style callback: uses "code" at top level (200 = success, 501 = failed, etc.)
-    const isVeoCallback = !!callbackCode && !stateOrStatus
-    let isCompleted = false
-    let isFailed = false
-
-    if (isVeoCallback) {
-      isCompleted = callbackCode === 200
-      isFailed = callbackCode >= 400 && callbackCode !== 200
-    } else {
-      // Standard KIE.AI callback: uses state/status fields
-      const statusCheck = { state: stateOrStatus, status: stateOrStatus }
-      isCompleted = isTaskCompleted(statusCheck)
-      isFailed = isTaskFailed(statusCheck)
-    }
-
-    if (isCompleted) {
-      // Extract result URL from callback payload
-      // Standard models: resultJson field
-      // Veo: data.info.resultUrls (JSON string like '["url"]')
-      let resultData = callbackData.resultJson || callbackData.result || body.resultJson || body.result || body.output || callbackData.output
-
-      // Veo-specific: extract from data.info.resultUrls
-      if (callbackData.info) {
-        const info = callbackData.info
-        // resultUrls can be a JSON string: '["https://..."]' or a direct URL
-        if (info.resultUrls) {
-          resultData = info.resultUrls
-        } else if (info.originUrls) {
-          resultData = info.originUrls
-        }
+    if (status === 'completed') {
+      let resultUrl: string | null = null
+      if (outputs && outputs.length > 0 && typeof outputs[0] === 'string') {
+        resultUrl = outputs[0]
       }
 
-      // Fallback to callbackData if nothing found
-      if (!resultData) {
-        resultData = callbackData
-      }
-
-      console.log(`[Callback] Task ${taskId} completed. Extracting URL from result...`)
-
-      const resultUrl = extractResultUrl(resultData)
-
-      if (resultUrl) {
-        console.log(`[Callback] Successfully extracted URL: ${resultUrl.substring(0, 150)}...`)
-
-        // Update DB — Supabase Realtime will automatically notify the frontend
-        await db.generation.update({
-          where: { id: generation.id },
-          data: {
-            status: 'COMPLETED',
-            resultUrl,
-          },
-        })
-      } else {
-        // Try regex fallback to find any URL in the raw data
-        const rawStr = JSON.stringify(resultData)
-        const urlMatch = rawStr.match(/https?:\/\/[^\s"'<>]+\.(mp4|webm|mov|png|jpg|jpeg|gif|webp)/i)
-
-        if (urlMatch) {
-          console.log(`[Callback] Found URL via regex fallback: ${urlMatch[0].substring(0, 150)}...`)
-          await db.generation.update({
-            where: { id: generation.id },
-            data: {
-              status: 'COMPLETED',
-              resultUrl: urlMatch[0],
-            },
-          })
-        } else {
-          // Couldn't extract URL, save raw result
-          const jsonResult = typeof resultData === 'string'
-            ? resultData
-            : JSON.stringify(resultData)
-
-          console.log(`[Callback] No URL extracted, saving raw result (${jsonResult.length} chars). Raw:`, jsonResult.substring(0, 500))
-
-          await db.generation.update({
-            where: { id: generation.id },
-            data: {
-              status: 'COMPLETED',
-              resultUrl: jsonResult,
-            },
-          })
-        }
-      }
-    } else if (isFailed) {
-      const errorMsg = callbackData.failMsg || callbackData.error || callbackData.msg ||
-        body.failMsg || body.error || body.msg || 'Generation failed'
-
-      console.error(`[Callback] Task ${taskId} failed:`, errorMsg)
-
-      // Update DB — Supabase Realtime will automatically notify the frontend
       await db.generation.update({
         where: { id: generation.id },
-        data: {
-          status: 'FAILED',
-          resultUrl: typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg),
-        },
+        data: { status: 'COMPLETED', resultUrl: resultUrl || JSON.stringify(outputs || '') },
       })
-
-      // Refund credits if the generation had a cost
-      if (generation.cost && generation.cost > 0) {
+      console.log(`[Webhook] ✓ COMPLETED taskId=${taskId} url=${resultUrl || '(none)'}`)
+    } else if (status === 'failed') {
+      if (generation.cost > 0) {
         try {
           await db.user.update({
             where: { id: generation.userId },
             data: { paidCredits: { increment: generation.cost } },
           })
-          console.log(`[Callback Refund] Refunded ${generation.cost} credits to user ${generation.userId} (callback task ${taskId} failed)`)
-        } catch (refundErr) {
-          console.error('[Callback Refund] Failed to refund credits:', refundErr)
-        }
+          console.log(`[Webhook] Refunded ${generation.cost} credits to user ${generation.userId}`)
+        } catch { /* ignore */ }
       }
+      await db.generation.update({
+        where: { id: generation.id },
+        data: { status: 'FAILED', resultUrl: error || 'Generation failed' },
+      })
+      console.log(`[Webhook] ✗ FAILED taskId=${taskId} error=${error}`)
     } else {
-      // Still processing
-      console.log(`[Callback] Task ${taskId} state: ${stateOrStatus}, keeping as PROCESSING`)
+      console.log(`[Webhook] Task ${taskId} intermediate status: ${status}`)
     }
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('[Callback] Error processing callback:', error)
-    // Always return 200 to KIE.AI so they don't retry
-    return NextResponse.json(
-      { success: true, message: 'Callback received but processing failed' },
-      { status: 200 }
-    )
+    console.error('[Webhook] ERROR:', error)
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 }
