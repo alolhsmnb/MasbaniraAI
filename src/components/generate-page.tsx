@@ -735,8 +735,81 @@ export function GeneratePage() {
                 {/* Image Upload Section */}
                 {currentModelSupportsImage && (
                   <div className="space-y-3">
-                    {isSeedanceModel || isSeedanceWsModel ? (
-                      /* ===== Seedance: Two separate frame upload areas ===== */
+                    {isSeedanceWsModel ? (
+                      /* ===== WaveSpeed Seedance: Reference Images upload ===== */
+                      <>
+                        <div className="flex items-center justify-between flex-wrap gap-1">
+                          <Label className="text-sm text-muted-foreground flex items-center gap-1.5">
+                            <ImagePlus className="size-3.5" />
+                            Reference Images
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">Optional</Badge>
+                          </Label>
+                          <span className="text-xs text-muted-foreground">
+                            {uploadedImages.length + imageUrls.length}/8
+                          </span>
+                        </div>
+
+                        {/* Upload area */}
+                        <div
+                          onClick={() => fileInputRef.current?.click()}
+                          className="border-2 border-dashed border-white/10 rounded-xl p-4 text-center cursor-pointer hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all group"
+                        >
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/gif"
+                            multiple
+                            className="hidden"
+                            onChange={handleFileSelect}
+                          />
+                          {isUploading ? (
+                            <div className="flex items-center justify-center gap-2">
+                              <Loader2 className="size-4 animate-spin text-emerald-400" />
+                              <span className="text-sm text-muted-foreground">Uploading...</span>
+                            </div>
+                          ) : (
+                            <>
+                              <Upload className="size-6 mx-auto text-muted-foreground group-hover:text-emerald-400 transition-colors" />
+                              <p className="text-xs text-muted-foreground mt-2">
+                                Click to upload reference images
+                              </p>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Uploaded images preview */}
+                        {(uploadedImages.length > 0 || imageUrls.length > 0) && (
+                          <div className="grid grid-cols-4 gap-2">
+                            {uploadedImages.map((img, i) => (
+                              <div key={`file-${i}`} className="relative group aspect-square rounded-lg overflow-hidden border border-white/10">
+                                <img src={img.preview} alt="" className="w-full h-full object-cover" />
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); removeImage(i, 'file') }}
+                                  className="absolute top-1 right-1 size-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                                >
+                                  <X className="size-3" />
+                                </button>
+                              </div>
+                            ))}
+                            {imageUrls.map((url, i) => (
+                              <div key={`url-${i}`} className="relative group aspect-square rounded-lg overflow-hidden border border-white/10">
+                                <img src={url} alt="" className="w-full h-full object-cover" />
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); removeImage(i, 'url') }}
+                                  className="absolute top-1 right-1 size-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                                >
+                                  <X className="size-3" />
+                                </button>
+                                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent p-1">
+                                  <p className="text-[9px] text-white truncate">URL</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    ) : isSeedanceModel ? (
+                      /* ===== KIE Seedance: Two separate frame upload areas ===== */
                       <>
                         {/* Section label */}
                         <div className="flex items-center gap-1.5">
@@ -824,7 +897,7 @@ export function GeneratePage() {
                           </div>
                         </div>
 
-                        {/* Reference Images (URL only for Seedance, since frames use dedicated upload) */}
+                        {/* Reference Images (URL only for Seedance KIE, since frames use dedicated upload) */}
                         <div className="space-y-2">
                           <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
                             <ImagePlus className="size-3.5" />
@@ -1439,12 +1512,57 @@ export function GeneratePage() {
                                   ))}
                                 </div>
                               </div>
-                              {/* Resolution - Fixed 480p */}
+
+                              {/* Reference Images (URL) */}
                               <div className="space-y-2">
-                                <Label className="text-xs text-muted-foreground">Resolution</Label>
-                                <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-muted-foreground">
-                                  480p · Fixed
+                                <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                  🖼️ Reference Images
+                                  <span className="text-[10px] text-muted-foreground/60">(URL · optional)</span>
+                                </Label>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="url"
+                                    placeholder="https://example.com/image.png"
+                                    value={urlInput}
+                                    onChange={(e) => setUrlInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && urlInput.trim()) {
+                                        try {
+                                          new URL(urlInput.trim())
+                                          handleAddUrl()
+                                        } catch { toast.error('Invalid URL') }
+                                      }
+                                    }}
+                                    className="flex-1 h-9 px-3 rounded-lg bg-white/5 border border-white/10 text-xs placeholder:text-muted-foreground/40 focus:border-emerald-500/50 focus:outline-none"
+                                    dir="ltr"
+                                  />
+                                  <button
+                                    onClick={() => {
+                                      if (!urlInput.trim()) return
+                                      try {
+                                        new URL(urlInput.trim())
+                                        handleAddUrl()
+                                      } catch { toast.error('Invalid URL') }
+                                    }}
+                                    disabled={!urlInput.trim()}
+                                    className="h-9 px-3 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs hover:bg-emerald-500/30 transition-colors disabled:opacity-40"
+                                  >Add</button>
                                 </div>
+                                {imageUrls.length > 0 && (
+                                  <div className="grid grid-cols-4 gap-1.5">
+                                    {imageUrls.map((url, i) => (
+                                      <div key={`ref-${i}`} className="relative group aspect-square rounded-lg overflow-hidden border border-white/10">
+                                        <img src={url} alt="" className="w-full h-full object-cover" />
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); removeImage(i, 'url') }}
+                                          className="absolute top-0.5 right-0.5 size-4 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                                        >
+                                          <X className="size-2.5" />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
 
                               {/* Web Search toggle */}
