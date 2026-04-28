@@ -280,6 +280,7 @@ Response: `{ "data": { "id": "task-uuid", "status": "pending" } }`
 |----------|------|------|---------------|
 | `openai/gpt-image-2/text-to-image` | GPT Image 2 (WaveSpeed) | IMAGE | resolution_quality |
 | `openai/gpt-image-2/edit` | GPT Image 2 Edit (WaveSpeed) | IMAGE | resolution_quality |
+| `bytedance/seedance-2.0-fast/text-to-video` | Seedance 2.0 Fast (WaveSpeed) | VIDEO | duration (5s, 10s) |
 | `kwaivgi/kling-v3.0-std` | Kling 3.0 | VIDEO | duration |
 | `kwaivgi/kling-v3.0-std/image-to-video` | Kling Image-to-Video | VIDEO | duration |
 
