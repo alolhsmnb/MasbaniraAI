@@ -201,7 +201,15 @@ export function GeneratePage() {
     onFailed: handleFailed,
   })
 
-
+  // Check if current model supports/requires image input (must be before useMemo that uses these)
+  const isSeedanceModel = SEEDANCE_MODELS.includes(selectedModel)
+  const isKlingModel = KLING_MODELS.includes(selectedModel)
+  const currentModelSupportsImage = IMAGE_INPUT_MODELS.includes(selectedModel) || IMAGE_REQUIRED_MODELS.includes(selectedModel) || isSeedanceModel || isKlingModel || selectedModel.startsWith('veo3')
+  const currentModelRequiresImage = IMAGE_REQUIRED_MODELS.includes(selectedModel) || selectedModel === 'kwaivgi/kling-v3.0-std/image-to-video'
+  const isVideoModel = VIDEO_MODELS.includes(selectedModel) || selectedModel.startsWith('veo3') || isKlingModel
+  const currentModelIsImageToVideo = selectedModel === 'grok-imagine/image-to-video' || selectedModel === 'kwaivgi/kling-v3.0-std/image-to-video'
+  const isSora2Model = SORA2_MODELS.includes(selectedModel)
+  const isVeoModel = selectedModel.startsWith('veo3')
 
   // Compute current cost based on model pricing and options
   const currentCost = useMemo(() => {
@@ -236,16 +244,6 @@ export function GeneratePage() {
     }
     return 1
   }, [models, selectedModel, imageSize, videoDuration, videoResolution, soraFrames, isKlingModel, klingDuration])
-
-  // Check if current model supports/requires image input
-  const isSeedanceModel = SEEDANCE_MODELS.includes(selectedModel)
-  const isKlingModel = KLING_MODELS.includes(selectedModel)
-  const currentModelSupportsImage = IMAGE_INPUT_MODELS.includes(selectedModel) || IMAGE_REQUIRED_MODELS.includes(selectedModel) || isSeedanceModel || isKlingModel || selectedModel.startsWith('veo3')
-  const currentModelRequiresImage = IMAGE_REQUIRED_MODELS.includes(selectedModel) || selectedModel === 'kwaivgi/kling-v3.0-std/image-to-video'
-  const isVideoModel = VIDEO_MODELS.includes(selectedModel) || selectedModel.startsWith('veo3') || isKlingModel
-  const currentModelIsImageToVideo = selectedModel === 'grok-imagine/image-to-video' || selectedModel === 'kwaivgi/kling-v3.0-std/image-to-video'
-  const isSora2Model = SORA2_MODELS.includes(selectedModel)
-  const isVeoModel = selectedModel.startsWith('veo3')
 
   // Reset aspect ratio when switching to Veo/Seedance/Kling model
   const handleModelChange = useCallback((modelId: string) => {
