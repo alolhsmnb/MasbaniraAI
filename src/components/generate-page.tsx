@@ -1507,7 +1507,7 @@ export function GeneratePage() {
                                           : 'bg-white/5 border border-white/10 text-muted-foreground hover:border-emerald-500/30 hover:text-foreground'
                                       }`}
                                     >
-                                      {d}s
+                                      {d} ثوانى
                                     </button>
                                   ))}
                                 </div>
