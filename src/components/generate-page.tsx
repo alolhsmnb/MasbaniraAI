@@ -136,9 +136,8 @@ export function GeneratePage() {
 
   // Seedance state
   const [seedanceDuration, setSeedanceDuration] = useState(5)
-  const [seedanceResolution, setSeedanceResolution] = useState('720p')
-  const [seedanceGenerateAudio, setSeedanceGenerateAudio] = useState(true)
   const [seedanceWebSearch, setSeedanceWebSearch] = useState(false)
+  const [seedanceGenerateAudio, setSeedanceGenerateAudio] = useState(true)
   const [seedanceRefVideoUrls, setSeedanceRefVideoUrls] = useState<string[]>([])
   const [seedanceRefAudioUrls, setSeedanceRefAudioUrls] = useState<string[]>([])
   const [seedanceRefVideoInput, setSeedanceRefVideoInput] = useState('')
@@ -151,6 +150,13 @@ export function GeneratePage() {
   const [seedanceLastFrameUploading, setSeedanceLastFrameUploading] = useState(false)
   const seedanceFirstFrameRef = useRef<HTMLInputElement>(null)
   const seedanceLastFrameRef = useRef<HTMLInputElement>(null)
+  // Seedance WS: video/audio upload state
+  const [seedanceRefVideos, setSeedanceRefVideos] = useState<{ file: File; name: string; url?: string }[]>([])
+  const [seedanceRefAudios, setSeedanceRefAudios] = useState<{ file: File; name: string; url?: string }[]>([])
+  const [seedanceRefVideoUploading, setSeedanceRefVideoUploading] = useState(false)
+  const [seedanceRefAudioUploading, setSeedanceRefAudioUploading] = useState(false)
+  const seedanceRefVideoFileRef = useRef<HTMLInputElement>(null)
+  const seedanceRefAudioFileRef = useRef<HTMLInputElement>(null)
 
   // Image upload state
   const [uploadedImages, setUploadedImages] = useState<{ file: File; preview: string; url?: string }[]>([])
@@ -394,6 +400,70 @@ export function GeneratePage() {
     }
   }
 
+  // Upload video/audio files for Seedance WS references (uses ImgBB for all)
+  const handleRefMediaUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    type: 'video' | 'audio'
+  ) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+
+    const maxItems = 3
+    const currentItems = type === 'video' ? seedanceRefVideos.length + seedanceRefVideoUrls.length : seedanceRefAudios.length + seedanceRefAudioUrls.length
+    const remaining = maxItems - currentItems
+    if (remaining <= 0) {
+      toast.error(`Maximum ${maxItems} reference ${type}s`)
+      return
+    }
+
+    const toUpload = files.slice(0, remaining)
+    const setUploading = type === 'video' ? setSeedanceRefVideoUploading : setSeedanceRefAudioUploading
+
+    setUploading(true)
+    try {
+      // Convert files to base64 and upload via ImgBB (it handles any binary)
+      const uploadedUrls: string[] = []
+      for (const file of toUpload) {
+        if (file.size > 10 * 1024 * 1024) {
+          toast.error(`File "${file.name}" exceeds 10MB limit`)
+          continue
+        }
+        const formData = new FormData()
+        formData.append('images', file)
+
+        const res = await fetch('/api/upload', { method: 'POST', body: formData })
+        if (!res.ok) {
+          toast.error(`Upload failed for "${file.name}"`)
+          continue
+        }
+        const data = await res.json()
+        if (data.success && data.data?.urls?.[0]) {
+          uploadedUrls.push(data.data.urls[0])
+        }
+      }
+
+      if (uploadedUrls.length > 0) {
+        const newItems = toUpload.slice(0, uploadedUrls.length).map((file, i) => ({
+          file,
+          name: file.name,
+          url: uploadedUrls[i],
+        }))
+        if (type === 'video') {
+          setSeedanceRefVideos(prev => [...prev, ...newItems])
+        } else {
+          setSeedanceRefAudios(prev => [...prev, ...newItems])
+        }
+        toast.success(`${uploadedUrls.length} ${type}(s) uploaded`)
+      }
+    } catch {
+      toast.error(`Failed to upload ${type}(s)`)
+    } finally {
+      setUploading(false)
+      if (type === 'video' && seedanceRefVideoFileRef.current) seedanceRefVideoFileRef.current.value = ''
+      if (type === 'audio' && seedanceRefAudioFileRef.current) seedanceRefAudioFileRef.current.value = ''
+    }
+  }
+
   // Upload images handler
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
@@ -543,16 +613,25 @@ export function GeneratePage() {
         seedanceReferenceVideoUrls: seedanceRefVideoUrls.length > 0 ? seedanceRefVideoUrls : undefined,
         seedanceReferenceAudioUrls: seedanceRefAudioUrls.length > 0 ? seedanceRefAudioUrls : undefined,
         seedanceDuration,
-        seedanceResolution,
         seedanceGenerateAudio,
         seedanceWebSearch,
       } : {}
 
-      // Build WaveSpeed Seedance payload
+      // Build WaveSpeed Seedance payload — collect all reference URLs (uploaded files + URL inputs)
+      const allRefVideoUrls = [
+        ...seedanceRefVideos.map(v => v.url).filter(Boolean) as string[],
+        ...seedanceRefVideoUrls,
+      ]
+      const allRefAudioUrls = [
+        ...seedanceRefAudios.map(a => a.url).filter(Boolean) as string[],
+        ...seedanceRefAudioUrls,
+      ]
       const seedanceWsPayload = isSeedanceWsModel ? {
+        seedanceStartImageUrl: seedanceFirstFrame?.url || undefined,
+        seedanceEndImageUrl: seedanceLastFrame?.url || undefined,
         seedanceReferenceImageUrls: allImageUrls.length > 0 ? allImageUrls : undefined,
-        seedanceReferenceVideoUrls: seedanceRefVideoUrls.length > 0 ? seedanceRefVideoUrls : undefined,
-        seedanceReferenceAudioUrls: seedanceRefAudioUrls.length > 0 ? seedanceRefAudioUrls : undefined,
+        seedanceReferenceVideoUrls: allRefVideoUrls.length > 0 ? allRefVideoUrls : undefined,
+        seedanceReferenceAudioUrls: allRefAudioUrls.length > 0 ? allRefAudioUrls : undefined,
         seedanceDuration,
         seedanceWebSearch,
       } : {}
@@ -577,7 +656,7 @@ export function GeneratePage() {
           modelId: selectedModel,
           prompt: prompt.trim() || undefined,
           aspectRatio: isVeoModel ? (aspectRatio || '16:9') : isSora2Model ? (aspectRatio === 'portrait' || aspectRatio === 'landscape' ? aspectRatio : 'landscape') : (isSeedanceModel || isSeedanceWsModel) ? (aspectRatio || '16:9') : isKlingModel ? (aspectRatio || '16:9') : isGptImage2Model ? (aspectRatio || '1:1') : aspectRatio,
-          imageSize: isVeoModel ? veoResolution : (isSeedanceModel ? seedanceResolution : (isVideoModel && !isSora2Model ? videoResolution : (imageSize === 'Auto' ? 'AUTO' : imageSize))),
+          imageSize: isVeoModel ? veoResolution : isSeedanceModel ? '480p' : (isVideoModel && !isSora2Model ? videoResolution : (imageSize === 'Auto' ? 'AUTO' : imageSize)),
           rotation: parseInt(rotation),
           type: isVideoModel ? 'VIDEO' : genType,
           imageInput: allImageUrls.length > 0 ? allImageUrls : undefined,
@@ -736,77 +815,157 @@ export function GeneratePage() {
                 {currentModelSupportsImage && (
                   <div className="space-y-3">
                     {isSeedanceWsModel ? (
-                      /* ===== WaveSpeed Seedance: Reference Images upload ===== */
+                      /* ===== WaveSpeed Seedance: Start Image, Last Image, Reference Images ===== */
                       <>
-                        <div className="flex items-center justify-between flex-wrap gap-1">
-                          <Label className="text-sm text-muted-foreground flex items-center gap-1.5">
-                            <ImagePlus className="size-3.5" />
-                            Reference Images
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">Optional</Badge>
-                          </Label>
-                          <span className="text-xs text-muted-foreground">
-                            {uploadedImages.length + imageUrls.length}/8
-                          </span>
+                        {/* Start Image & Last Image — side by side */}
+                        <div className="grid grid-cols-2 gap-3">
+                          {/* Start Image */}
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                              <span className="size-1.5 rounded-full bg-emerald-400" />
+                              Start Image
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">Optional</Badge>
+                            </Label>
+                            <div
+                              onClick={() => seedanceFirstFrameRef.current?.click()}
+                              className="border-2 border-dashed border-white/10 rounded-xl aspect-video flex flex-col items-center justify-center cursor-pointer hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all group relative overflow-hidden"
+                            >
+                              <input
+                                ref={seedanceFirstFrameRef}
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp,image/gif"
+                                className="hidden"
+                                onChange={(e) => handleFrameUpload(e, 'first')}
+                              />
+                              {seedanceFirstFrameUploading ? (
+                                <Loader2 className="size-5 animate-spin text-emerald-400" />
+                              ) : seedanceFirstFrame ? (
+                                <>
+                                  <img src={seedanceFirstFrame.preview} alt="Start image" className="absolute inset-0 w-full h-full object-cover" />
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setSeedanceFirstFrame(null) }}
+                                    className="absolute top-1.5 right-1.5 size-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-red-500 transition-colors z-10"
+                                  >
+                                    <X className="size-3.5" />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="size-5 text-muted-foreground group-hover:text-emerald-400 transition-colors" />
+                                  <p className="text-[10px] text-muted-foreground mt-1">Click to upload</p>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Last Image */}
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                              <span className="size-1.5 rounded-full bg-amber-400" />
+                              Last Image
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">Optional</Badge>
+                            </Label>
+                            <div
+                              onClick={() => seedanceLastFrameRef.current?.click()}
+                              className="border-2 border-dashed border-white/10 rounded-xl aspect-video flex flex-col items-center justify-center cursor-pointer hover:border-amber-500/30 hover:bg-amber-500/5 transition-all group relative overflow-hidden"
+                            >
+                              <input
+                                ref={seedanceLastFrameRef}
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp,image/gif"
+                                className="hidden"
+                                onChange={(e) => handleFrameUpload(e, 'last')}
+                              />
+                              {seedanceLastFrameUploading ? (
+                                <Loader2 className="size-5 animate-spin text-amber-400" />
+                              ) : seedanceLastFrame ? (
+                                <>
+                                  <img src={seedanceLastFrame.preview} alt="Last image" className="absolute inset-0 w-full h-full object-cover" />
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setSeedanceLastFrame(null) }}
+                                    className="absolute top-1.5 right-1.5 size-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-red-500 transition-colors z-10"
+                                  >
+                                    <X className="size-3.5" />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="size-5 text-muted-foreground group-hover:text-amber-400 transition-colors" />
+                                  <p className="text-[10px] text-muted-foreground mt-1">Click to upload</p>
+                                </>
+                              )}
+                            </div>
+                          </div>
                         </div>
 
-                        {/* Upload area */}
-                        <div
-                          onClick={() => fileInputRef.current?.click()}
-                          className="border-2 border-dashed border-white/10 rounded-xl p-4 text-center cursor-pointer hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all group"
-                        >
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp,image/gif"
-                            multiple
-                            className="hidden"
-                            onChange={handleFileSelect}
-                          />
-                          {isUploading ? (
-                            <div className="flex items-center justify-center gap-2">
-                              <Loader2 className="size-4 animate-spin text-emerald-400" />
-                              <span className="text-sm text-muted-foreground">Uploading...</span>
+                        {/* Reference Images upload */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between flex-wrap gap-1">
+                            <Label className="text-sm text-muted-foreground flex items-center gap-1.5">
+                              <ImagePlus className="size-3.5" />
+                              Reference Images
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">Optional</Badge>
+                            </Label>
+                            <span className="text-xs text-muted-foreground">
+                              {uploadedImages.length + imageUrls.length}/8
+                            </span>
+                          </div>
+                          <div
+                            onClick={() => fileInputRef.current?.click()}
+                            className="border-2 border-dashed border-white/10 rounded-xl p-4 text-center cursor-pointer hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all group"
+                          >
+                            <input
+                              ref={fileInputRef}
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp,image/gif"
+                              multiple
+                              className="hidden"
+                              onChange={handleFileSelect}
+                            />
+                            {isUploading ? (
+                              <div className="flex items-center justify-center gap-2">
+                                <Loader2 className="size-4 animate-spin text-emerald-400" />
+                                <span className="text-sm text-muted-foreground">Uploading...</span>
+                              </div>
+                            ) : (
+                              <>
+                                <Upload className="size-6 mx-auto text-muted-foreground group-hover:text-emerald-400 transition-colors" />
+                                <p className="text-xs text-muted-foreground mt-2">
+                                  Click to upload reference images
+                                </p>
+                              </>
+                            )}
+                          </div>
+                          {(uploadedImages.length > 0 || imageUrls.length > 0) && (
+                            <div className="grid grid-cols-4 gap-2">
+                              {uploadedImages.map((img, i) => (
+                                <div key={`file-${i}`} className="relative group aspect-square rounded-lg overflow-hidden border border-white/10">
+                                  <img src={img.preview} alt="" className="w-full h-full object-cover" />
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); removeImage(i, 'file') }}
+                                    className="absolute top-1 right-1 size-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                                  >
+                                    <X className="size-3" />
+                                  </button>
+                                </div>
+                              ))}
+                              {imageUrls.map((url, i) => (
+                                <div key={`url-${i}`} className="relative group aspect-square rounded-lg overflow-hidden border border-white/10">
+                                  <img src={url} alt="" className="w-full h-full object-cover" />
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); removeImage(i, 'url') }}
+                                    className="absolute top-1 right-1 size-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                                  >
+                                    <X className="size-3" />
+                                  </button>
+                                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent p-1">
+                                    <p className="text-[9px] text-white truncate">URL</p>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                          ) : (
-                            <>
-                              <Upload className="size-6 mx-auto text-muted-foreground group-hover:text-emerald-400 transition-colors" />
-                              <p className="text-xs text-muted-foreground mt-2">
-                                Click to upload reference images
-                              </p>
-                            </>
                           )}
                         </div>
-
-                        {/* Uploaded images preview */}
-                        {(uploadedImages.length > 0 || imageUrls.length > 0) && (
-                          <div className="grid grid-cols-4 gap-2">
-                            {uploadedImages.map((img, i) => (
-                              <div key={`file-${i}`} className="relative group aspect-square rounded-lg overflow-hidden border border-white/10">
-                                <img src={img.preview} alt="" className="w-full h-full object-cover" />
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); removeImage(i, 'file') }}
-                                  className="absolute top-1 right-1 size-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
-                                >
-                                  <X className="size-3" />
-                                </button>
-                              </div>
-                            ))}
-                            {imageUrls.map((url, i) => (
-                              <div key={`url-${i}`} className="relative group aspect-square rounded-lg overflow-hidden border border-white/10">
-                                <img src={url} alt="" className="w-full h-full object-cover" />
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); removeImage(i, 'url') }}
-                                  className="absolute top-1 right-1 size-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
-                                >
-                                  <X className="size-3" />
-                                </button>
-                                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent p-1">
-                                  <p className="text-[9px] text-white truncate">URL</p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </>
                     ) : isSeedanceModel ? (
                       /* ===== KIE Seedance: Two separate frame upload areas ===== */
@@ -1513,58 +1672,6 @@ export function GeneratePage() {
                                 </div>
                               </div>
 
-                              {/* Reference Images (URL) */}
-                              <div className="space-y-2">
-                                <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                                  🖼️ Reference Images
-                                  <span className="text-[10px] text-muted-foreground/60">(URL · optional)</span>
-                                </Label>
-                                <div className="flex gap-2">
-                                  <input
-                                    type="url"
-                                    placeholder="https://example.com/image.png"
-                                    value={urlInput}
-                                    onChange={(e) => setUrlInput(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter' && urlInput.trim()) {
-                                        try {
-                                          new URL(urlInput.trim())
-                                          handleAddUrl()
-                                        } catch { toast.error('Invalid URL') }
-                                      }
-                                    }}
-                                    className="flex-1 h-9 px-3 rounded-lg bg-white/5 border border-white/10 text-xs placeholder:text-muted-foreground/40 focus:border-emerald-500/50 focus:outline-none"
-                                    dir="ltr"
-                                  />
-                                  <button
-                                    onClick={() => {
-                                      if (!urlInput.trim()) return
-                                      try {
-                                        new URL(urlInput.trim())
-                                        handleAddUrl()
-                                      } catch { toast.error('Invalid URL') }
-                                    }}
-                                    disabled={!urlInput.trim()}
-                                    className="h-9 px-3 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs hover:bg-emerald-500/30 transition-colors disabled:opacity-40"
-                                  >Add</button>
-                                </div>
-                                {imageUrls.length > 0 && (
-                                  <div className="grid grid-cols-4 gap-1.5">
-                                    {imageUrls.map((url, i) => (
-                                      <div key={`ref-${i}`} className="relative group aspect-square rounded-lg overflow-hidden border border-white/10">
-                                        <img src={url} alt="" className="w-full h-full object-cover" />
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); removeImage(i, 'url') }}
-                                          className="absolute top-0.5 right-0.5 size-4 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
-                                        >
-                                          <X className="size-2.5" />
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-
                               {/* Web Search toggle */}
                               <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
                                 <div>
@@ -1585,24 +1692,47 @@ export function GeneratePage() {
                                 </button>
                               </div>
 
-                              {/* Reference Video URLs */}
+                              {/* Reference Videos — file upload + URL input */}
                               <div className="space-y-2">
                                 <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
                                   🎬 Reference Videos
-                                  <span className="text-[10px] text-muted-foreground/60">(URL · max 3)</span>
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">Optional · max 3</Badge>
                                 </Label>
+                                {/* File upload button */}
+                                <div
+                                  onClick={() => seedanceRefVideoFileRef.current?.click()}
+                                  className="border-2 border-dashed border-white/10 rounded-xl p-3 text-center cursor-pointer hover:border-purple-500/30 hover:bg-purple-500/5 transition-all group"
+                                >
+                                  <input
+                                    ref={seedanceRefVideoFileRef}
+                                    type="file"
+                                    accept="video/mp4,video/webm,video/mov,video/avi"
+                                    className="hidden"
+                                    onChange={(e) => handleRefMediaUpload(e, 'video')}
+                                  />
+                                  {seedanceRefVideoUploading ? (
+                                    <div className="flex items-center justify-center gap-2">
+                                      <Loader2 className="size-4 animate-spin text-purple-400" />
+                                      <span className="text-xs text-muted-foreground">Uploading...</span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-center gap-2">
+                                      <Upload className="size-4 text-muted-foreground group-hover:text-purple-400 transition-colors" />
+                                      <span className="text-xs text-muted-foreground">Click to upload video</span>
+                                    </div>
+                                  )}
+                                </div>
+                                {/* URL input */}
                                 <div className="flex gap-2">
                                   <input
                                     type="url"
-                                    placeholder="https://example.com/video.mp4"
+                                    placeholder="Or paste video URL..."
                                     value={seedanceRefVideoInput}
                                     onChange={(e) => setSeedanceRefVideoInput(e.target.value)}
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter' && seedanceRefVideoInput.trim()) {
-                                        if (seedanceRefVideoUrls.length >= 3) {
-                                          toast.error('Maximum 3 reference videos')
-                                          return
-                                        }
+                                        const total = seedanceRefVideos.length + seedanceRefVideoUrls.length
+                                        if (total >= 3) { toast.error('Maximum 3 reference videos'); return }
                                         try {
                                           new URL(seedanceRefVideoInput.trim())
                                           setSeedanceRefVideoUrls(prev => [...prev, seedanceRefVideoInput.trim()])
@@ -1610,15 +1740,14 @@ export function GeneratePage() {
                                         } catch { toast.error('Invalid URL') }
                                       }
                                     }}
-                                    className="flex-1 h-9 px-3 rounded-lg bg-white/5 border border-white/10 text-xs placeholder:text-muted-foreground/40 focus:border-emerald-500/50 focus:outline-none"
+                                    className="flex-1 h-8 px-3 rounded-lg bg-white/5 border border-white/10 text-xs placeholder:text-muted-foreground/40 focus:border-purple-500/50 focus:outline-none"
+                                    dir="ltr"
                                   />
                                   <button
                                     onClick={() => {
                                       if (!seedanceRefVideoInput.trim()) return
-                                      if (seedanceRefVideoUrls.length >= 3) {
-                                        toast.error('Maximum 3 reference videos')
-                                        return
-                                      }
+                                      const total = seedanceRefVideos.length + seedanceRefVideoUrls.length
+                                      if (total >= 3) { toast.error('Maximum 3 reference videos'); return }
                                       try {
                                         new URL(seedanceRefVideoInput.trim())
                                         setSeedanceRefVideoUrls(prev => [...prev, seedanceRefVideoInput.trim()])
@@ -1626,41 +1755,75 @@ export function GeneratePage() {
                                       } catch { toast.error('Invalid URL') }
                                     }}
                                     disabled={!seedanceRefVideoInput.trim()}
-                                    className="h-9 px-3 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs hover:bg-emerald-500/30 transition-colors disabled:opacity-40"
+                                    className="h-8 px-3 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-400 text-xs hover:bg-purple-500/30 transition-colors disabled:opacity-40"
                                   >Add</button>
                                 </div>
-                                {seedanceRefVideoUrls.length > 0 && (
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {seedanceRefVideoUrls.map((url, i) => (
-                                      <span key={i} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/5 border border-white/10 text-[10px] text-muted-foreground max-w-[180px] truncate">
-                                        {url}
-                                        <button onClick={() => setSeedanceRefVideoUrls(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-300 shrink-0">
-                                          ✕
+                                {/* Uploaded videos list */}
+                                {(seedanceRefVideos.length > 0 || seedanceRefVideoUrls.length > 0) && (
+                                  <div className="space-y-1.5">
+                                    {seedanceRefVideos.map((v, i) => (
+                                      <div key={`file-${i}`} className="flex items-center gap-2 text-xs bg-white/5 rounded-lg px-2.5 py-1.5">
+                                        <span className="text-purple-400">🎬</span>
+                                        <span className="truncate flex-1 text-muted-foreground">{v.name}</span>
+                                        <button onClick={() => setSeedanceRefVideos(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-300 shrink-0">
+                                          <X className="size-3" />
                                         </button>
-                                      </span>
+                                      </div>
+                                    ))}
+                                    {seedanceRefVideoUrls.map((url, i) => (
+                                      <div key={`url-${i}`} className="flex items-center gap-2 text-xs bg-white/5 rounded-lg px-2.5 py-1.5">
+                                        <span className="text-purple-400">🔗</span>
+                                        <span className="truncate flex-1 text-muted-foreground font-mono" dir="ltr">{url}</span>
+                                        <button onClick={() => setSeedanceRefVideoUrls(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-300 shrink-0">
+                                          <X className="size-3" />
+                                        </button>
+                                      </div>
                                     ))}
                                   </div>
                                 )}
                               </div>
 
-                              {/* Reference Audio URLs */}
+                              {/* Reference Audios — file upload + URL input */}
                               <div className="space-y-2">
                                 <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                                  🎵 Reference Audio
-                                  <span className="text-[10px] text-muted-foreground/60">(URL · max 3)</span>
+                                  🎵 Reference Audios
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">Optional · max 3</Badge>
                                 </Label>
+                                {/* File upload button */}
+                                <div
+                                  onClick={() => seedanceRefAudioFileRef.current?.click()}
+                                  className="border-2 border-dashed border-white/10 rounded-xl p-3 text-center cursor-pointer hover:border-amber-500/30 hover:bg-amber-500/5 transition-all group"
+                                >
+                                  <input
+                                    ref={seedanceRefAudioFileRef}
+                                    type="file"
+                                    accept="audio/mp3,audio/wav,audio/m4a,audio/ogg,audio/aac"
+                                    className="hidden"
+                                    onChange={(e) => handleRefMediaUpload(e, 'audio')}
+                                  />
+                                  {seedanceRefAudioUploading ? (
+                                    <div className="flex items-center justify-center gap-2">
+                                      <Loader2 className="size-4 animate-spin text-amber-400" />
+                                      <span className="text-xs text-muted-foreground">Uploading...</span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-center gap-2">
+                                      <Upload className="size-4 text-muted-foreground group-hover:text-amber-400 transition-colors" />
+                                      <span className="text-xs text-muted-foreground">Click to upload audio</span>
+                                    </div>
+                                  )}
+                                </div>
+                                {/* URL input */}
                                 <div className="flex gap-2">
                                   <input
                                     type="url"
-                                    placeholder="https://example.com/audio.mp3"
+                                    placeholder="Or paste audio URL..."
                                     value={seedanceRefAudioInput}
                                     onChange={(e) => setSeedanceRefAudioInput(e.target.value)}
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter' && seedanceRefAudioInput.trim()) {
-                                        if (seedanceRefAudioUrls.length >= 3) {
-                                          toast.error('Maximum 3 reference audios')
-                                          return
-                                        }
+                                        const total = seedanceRefAudios.length + seedanceRefAudioUrls.length
+                                        if (total >= 3) { toast.error('Maximum 3 reference audios'); return }
                                         try {
                                           new URL(seedanceRefAudioInput.trim())
                                           setSeedanceRefAudioUrls(prev => [...prev, seedanceRefAudioInput.trim()])
@@ -1668,15 +1831,14 @@ export function GeneratePage() {
                                         } catch { toast.error('Invalid URL') }
                                       }
                                     }}
-                                    className="flex-1 h-9 px-3 rounded-lg bg-white/5 border border-white/10 text-xs placeholder:text-muted-foreground/40 focus:border-emerald-500/50 focus:outline-none"
+                                    className="flex-1 h-8 px-3 rounded-lg bg-white/5 border border-white/10 text-xs placeholder:text-muted-foreground/40 focus:border-amber-500/50 focus:outline-none"
+                                    dir="ltr"
                                   />
                                   <button
                                     onClick={() => {
                                       if (!seedanceRefAudioInput.trim()) return
-                                      if (seedanceRefAudioUrls.length >= 3) {
-                                        toast.error('Maximum 3 reference audios')
-                                        return
-                                      }
+                                      const total = seedanceRefAudios.length + seedanceRefAudioUrls.length
+                                      if (total >= 3) { toast.error('Maximum 3 reference audios'); return }
                                       try {
                                         new URL(seedanceRefAudioInput.trim())
                                         setSeedanceRefAudioUrls(prev => [...prev, seedanceRefAudioInput.trim()])
@@ -1684,18 +1846,29 @@ export function GeneratePage() {
                                       } catch { toast.error('Invalid URL') }
                                     }}
                                     disabled={!seedanceRefAudioInput.trim()}
-                                    className="h-9 px-3 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs hover:bg-emerald-500/30 transition-colors disabled:opacity-40"
+                                    className="h-8 px-3 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 text-xs hover:bg-amber-500/30 transition-colors disabled:opacity-40"
                                   >Add</button>
                                 </div>
-                                {seedanceRefAudioUrls.length > 0 && (
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {seedanceRefAudioUrls.map((url, i) => (
-                                      <span key={i} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/5 border border-white/10 text-[10px] text-muted-foreground max-w-[180px] truncate">
-                                        {url}
-                                        <button onClick={() => setSeedanceRefAudioUrls(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-300 shrink-0">
-                                          ✕
+                                {/* Uploaded audios list */}
+                                {(seedanceRefAudios.length > 0 || seedanceRefAudioUrls.length > 0) && (
+                                  <div className="space-y-1.5">
+                                    {seedanceRefAudios.map((a, i) => (
+                                      <div key={`file-${i}`} className="flex items-center gap-2 text-xs bg-white/5 rounded-lg px-2.5 py-1.5">
+                                        <span className="text-amber-400">🎵</span>
+                                        <span className="truncate flex-1 text-muted-foreground">{a.name}</span>
+                                        <button onClick={() => setSeedanceRefAudios(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-300 shrink-0">
+                                          <X className="size-3" />
                                         </button>
-                                      </span>
+                                      </div>
+                                    ))}
+                                    {seedanceRefAudioUrls.map((url, i) => (
+                                      <div key={`url-${i}`} className="flex items-center gap-2 text-xs bg-white/5 rounded-lg px-2.5 py-1.5">
+                                        <span className="text-amber-400">🔗</span>
+                                        <span className="truncate flex-1 text-muted-foreground font-mono" dir="ltr">{url}</span>
+                                        <button onClick={() => setSeedanceRefAudioUrls(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-300 shrink-0">
+                                          <X className="size-3" />
+                                        </button>
+                                      </div>
                                     ))}
                                   </div>
                                 )}

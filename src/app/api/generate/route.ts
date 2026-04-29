@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json()
-    const { modelId, prompt, aspectRatio, imageSize, rotation, type, imageInput, outputFormat, mode, duration, nFrames, removeWatermark, enableTranslation, watermark, seedanceFirstFrameUrl, seedanceLastFrameUrl, seedanceReferenceImageUrls, seedanceReferenceVideoUrls, seedanceReferenceAudioUrls, seedanceResolution, seedanceGenerateAudio, seedanceWebSearch, negativePrompt, klingCfgScale, klingSound, klingShotType, gptImage2Resolution, gptImage2Quality } = body || {}
+    const { modelId, prompt, aspectRatio, imageSize, rotation, type, imageInput, outputFormat, mode, duration, nFrames, removeWatermark, enableTranslation, watermark, seedanceFirstFrameUrl, seedanceLastFrameUrl, seedanceStartImageUrl, seedanceEndImageUrl, seedanceReferenceImageUrls, seedanceReferenceVideoUrls, seedanceReferenceAudioUrls, seedanceWebSearch, negativePrompt, klingCfgScale, klingSound, klingShotType, gptImage2Resolution, gptImage2Quality } = body || {}
 
     if (!modelId) {
       return NextResponse.json(
@@ -138,6 +138,9 @@ export async function POST(request: NextRequest) {
           if (isSeedanceWs && seedanceReferenceImageUrls && seedanceReferenceImageUrls.length > 0) return seedanceReferenceImageUrls
           return undefined
         })(),
+        // Seedance WS: start/end images
+        startImage: isSeedanceWs ? (seedanceStartImageUrl || seedanceFirstFrameUrl || undefined) : undefined,
+        endImage: isSeedanceWs ? (seedanceEndImageUrl || seedanceLastFrameUrl || undefined) : undefined,
         // Kling-specific params
         cfgScale: isKlingModel && klingCfgScale !== undefined ? klingCfgScale : undefined,
         sound: isKlingModel && klingSound !== undefined ? klingSound : undefined,

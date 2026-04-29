@@ -10,6 +10,7 @@ interface WavespeedCreateInput {
   duration?: number
   imageInput?: string[]
   images?: string[] // For GPT Image 2 Edit, Seedance WS reference_images
+  startImage?: string // Seedance WS: start image URL (maps to `image` in API)
   cfgScale?: number
   sound?: boolean
   shotType?: string
@@ -142,6 +143,8 @@ export async function createWavespeedTask(
   if (input.imageInput && input.imageInput.length > 0) {
     body.image = input.imageInput[0]
   }
+  // Seedance WS: start image (takes precedence over imageInput for Seedance)
+  if (input.startImage) body.image = input.startImage
   // GPT Image 2 Edit uses 'images' array
   if (input.images && input.images.length > 0) {
     body.images = input.images
