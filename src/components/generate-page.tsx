@@ -1200,6 +1200,207 @@ export function GeneratePage() {
                   </div>
                 )}
 
+                {/* WaveSpeed Seedance: Duration + Reference Videos + Audios — visible by default */}
+                {isSeedanceWsModel && (
+                  <div className="space-y-3">
+                    {/* Duration selector */}
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Duration</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {SEEDANCE_WS_DURATIONS.map((d) => (
+                          <button
+                            key={d}
+                            onClick={() => setSeedanceDuration(d)}
+                            className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                              seedanceDuration === d
+                                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/20'
+                                : 'bg-white/5 border border-white/10 text-muted-foreground hover:border-emerald-500/30 hover:text-foreground'
+                            }`}
+                          >
+                            {d} ثوانى
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Reference Videos — file upload + URL input */}
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                        🎬 Reference Videos
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">Optional · max 3</Badge>
+                      </Label>
+                      <div
+                        onClick={() => seedanceRefVideoFileRef.current?.click()}
+                        className="border-2 border-dashed border-white/10 rounded-xl p-3 text-center cursor-pointer hover:border-purple-500/30 hover:bg-purple-500/5 transition-all group"
+                      >
+                        <input
+                          ref={seedanceRefVideoFileRef}
+                          type="file"
+                          accept="video/mp4,video/webm,video/mov,video/avi"
+                          className="hidden"
+                          onChange={(e) => handleRefMediaUpload(e, 'video')}
+                        />
+                        {seedanceRefVideoUploading ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <Loader2 className="size-4 animate-spin text-purple-400" />
+                            <span className="text-xs text-muted-foreground">Uploading...</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center gap-2">
+                            <Upload className="size-4 text-muted-foreground group-hover:text-purple-400 transition-colors" />
+                            <span className="text-xs text-muted-foreground">Click to upload video</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="url"
+                          placeholder="Or paste video URL..."
+                          value={seedanceRefVideoInput}
+                          onChange={(e) => setSeedanceRefVideoInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && seedanceRefVideoInput.trim()) {
+                              const total = seedanceRefVideos.length + seedanceRefVideoUrls.length
+                              if (total >= 3) { toast.error('Maximum 3 reference videos'); return }
+                              try {
+                                new URL(seedanceRefVideoInput.trim())
+                                setSeedanceRefVideoUrls(prev => [...prev, seedanceRefVideoInput.trim()])
+                                setSeedanceRefVideoInput('')
+                              } catch { toast.error('Invalid URL') }
+                            }
+                          }}
+                          className="flex-1 h-8 px-3 rounded-lg bg-white/5 border border-white/10 text-xs placeholder:text-muted-foreground/40 focus:border-purple-500/50 focus:outline-none"
+                          dir="ltr"
+                        />
+                        <button
+                          onClick={() => {
+                            if (!seedanceRefVideoInput.trim()) return
+                            const total = seedanceRefVideos.length + seedanceRefVideoUrls.length
+                            if (total >= 3) { toast.error('Maximum 3 reference videos'); return }
+                            try {
+                              new URL(seedanceRefVideoInput.trim())
+                              setSeedanceRefVideoUrls(prev => [...prev, seedanceRefVideoInput.trim()])
+                              setSeedanceRefVideoInput('')
+                            } catch { toast.error('Invalid URL') }
+                          }}
+                          disabled={!seedanceRefVideoInput.trim()}
+                          className="h-8 px-3 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-400 text-xs hover:bg-purple-500/30 transition-colors disabled:opacity-40"
+                        >Add</button>
+                      </div>
+                      {(seedanceRefVideos.length > 0 || seedanceRefVideoUrls.length > 0) && (
+                        <div className="space-y-1.5">
+                          {seedanceRefVideos.map((v, i) => (
+                            <div key={`file-${i}`} className="flex items-center gap-2 text-xs bg-white/5 rounded-lg px-2.5 py-1.5">
+                              <span className="text-purple-400">🎬</span>
+                              <span className="truncate flex-1 text-muted-foreground">{v.name}</span>
+                              <button onClick={() => setSeedanceRefVideos(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-300 shrink-0">
+                                <X className="size-3" />
+                              </button>
+                            </div>
+                          ))}
+                          {seedanceRefVideoUrls.map((url, i) => (
+                            <div key={`url-${i}`} className="flex items-center gap-2 text-xs bg-white/5 rounded-lg px-2.5 py-1.5">
+                              <span className="text-purple-400">🔗</span>
+                              <span className="truncate flex-1 text-muted-foreground font-mono" dir="ltr">{url}</span>
+                              <button onClick={() => setSeedanceRefVideoUrls(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-300 shrink-0">
+                                <X className="size-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Reference Audios — file upload + URL input */}
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                        🎵 Reference Audios
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">Optional · max 3</Badge>
+                      </Label>
+                      <div
+                        onClick={() => seedanceRefAudioFileRef.current?.click()}
+                        className="border-2 border-dashed border-white/10 rounded-xl p-3 text-center cursor-pointer hover:border-amber-500/30 hover:bg-amber-500/5 transition-all group"
+                      >
+                        <input
+                          ref={seedanceRefAudioFileRef}
+                          type="file"
+                          accept="audio/mp3,audio/wav,audio/m4a,audio/ogg,audio/aac"
+                          className="hidden"
+                          onChange={(e) => handleRefMediaUpload(e, 'audio')}
+                        />
+                        {seedanceRefAudioUploading ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <Loader2 className="size-4 animate-spin text-amber-400" />
+                            <span className="text-xs text-muted-foreground">Uploading...</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center gap-2">
+                            <Upload className="size-4 text-muted-foreground group-hover:text-amber-400 transition-colors" />
+                            <span className="text-xs text-muted-foreground">Click to upload audio</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="url"
+                          placeholder="Or paste audio URL..."
+                          value={seedanceRefAudioInput}
+                          onChange={(e) => setSeedanceRefAudioInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && seedanceRefAudioInput.trim()) {
+                              const total = seedanceRefAudios.length + seedanceRefAudioUrls.length
+                              if (total >= 3) { toast.error('Maximum 3 reference audios'); return }
+                              try {
+                                new URL(seedanceRefAudioInput.trim())
+                                setSeedanceRefAudioUrls(prev => [...prev, seedanceRefAudioInput.trim()])
+                                setSeedanceRefAudioInput('')
+                              } catch { toast.error('Invalid URL') }
+                            }
+                          }}
+                          className="flex-1 h-8 px-3 rounded-lg bg-white/5 border border-white/10 text-xs placeholder:text-muted-foreground/40 focus:border-amber-500/50 focus:outline-none"
+                          dir="ltr"
+                        />
+                        <button
+                          onClick={() => {
+                            if (!seedanceRefAudioInput.trim()) return
+                            const total = seedanceRefAudios.length + seedanceRefAudioUrls.length
+                            if (total >= 3) { toast.error('Maximum 3 reference audios'); return }
+                            try {
+                              new URL(seedanceRefAudioInput.trim())
+                              setSeedanceRefAudioUrls(prev => [...prev, seedanceRefAudioInput.trim()])
+                              setSeedanceRefAudioInput('')
+                            } catch { toast.error('Invalid URL') }
+                          }}
+                          disabled={!seedanceRefAudioInput.trim()}
+                          className="h-8 px-3 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 text-xs hover:bg-amber-500/30 transition-colors disabled:opacity-40"
+                        >Add</button>
+                      </div>
+                      {(seedanceRefAudios.length > 0 || seedanceRefAudioUrls.length > 0) && (
+                        <div className="space-y-1.5">
+                          {seedanceRefAudios.map((a, i) => (
+                            <div key={`file-${i}`} className="flex items-center gap-2 text-xs bg-white/5 rounded-lg px-2.5 py-1.5">
+                              <span className="text-amber-400">🎵</span>
+                              <span className="truncate flex-1 text-muted-foreground">{a.name}</span>
+                              <button onClick={() => setSeedanceRefAudios(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-300 shrink-0">
+                                <X className="size-3" />
+                              </button>
+                            </div>
+                          ))}
+                          {seedanceRefAudioUrls.map((url, i) => (
+                            <div key={`url-${i}`} className="flex items-center gap-2 text-xs bg-white/5 rounded-lg px-2.5 py-1.5">
+                              <span className="text-amber-400">🔗</span>
+                              <span className="truncate flex-1 text-muted-foreground font-mono" dir="ltr">{url}</span>
+                              <button onClick={() => setSeedanceRefAudioUrls(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-300 shrink-0">
+                                <X className="size-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Advanced Settings */}
                 <div className="border border-white/5 rounded-xl overflow-hidden">
                   <button
@@ -1633,7 +1834,7 @@ export function GeneratePage() {
                                 )}
                               </div>
                             </div>
-                          ) : isVideoModel && !isVeoModel && !isKlingModel ? (
+                          ) : isVideoModel && !isVeoModel && !isKlingModel && !isSeedanceModel && !isSeedanceWsModel ? (
                             <div className="space-y-2">
                               <Label className="text-xs text-muted-foreground">Resolution</Label>
                               <Select value={videoResolution} onValueChange={(val) => setVideoResolution(val)}>
@@ -1650,28 +1851,8 @@ export function GeneratePage() {
                               </Select>
                             </div>
                           ) : isSeedanceWsModel ? (
-                            /* WaveSpeed Seedance settings */
+                            /* WaveSpeed Seedance: only Web Search in Advanced */
                             <div className="space-y-3">
-                              {/* Duration selector - 5s and 10s */}
-                              <div className="space-y-2">
-                                <Label className="text-xs text-muted-foreground">Duration</Label>
-                                <div className="grid grid-cols-2 gap-2">
-                                  {SEEDANCE_WS_DURATIONS.map((d) => (
-                                    <button
-                                      key={d}
-                                      onClick={() => setSeedanceDuration(d)}
-                                      className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                                        seedanceDuration === d
-                                          ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/20'
-                                          : 'bg-white/5 border border-white/10 text-muted-foreground hover:border-emerald-500/30 hover:text-foreground'
-                                      }`}
-                                    >
-                                      {d} ثوانى
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-
                               {/* Web Search toggle */}
                               <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
                                 <div>
@@ -1690,188 +1871,6 @@ export function GeneratePage() {
                                     }`}
                                   />
                                 </button>
-                              </div>
-
-                              {/* Reference Videos — file upload + URL input */}
-                              <div className="space-y-2">
-                                <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                                  🎬 Reference Videos
-                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">Optional · max 3</Badge>
-                                </Label>
-                                {/* File upload button */}
-                                <div
-                                  onClick={() => seedanceRefVideoFileRef.current?.click()}
-                                  className="border-2 border-dashed border-white/10 rounded-xl p-3 text-center cursor-pointer hover:border-purple-500/30 hover:bg-purple-500/5 transition-all group"
-                                >
-                                  <input
-                                    ref={seedanceRefVideoFileRef}
-                                    type="file"
-                                    accept="video/mp4,video/webm,video/mov,video/avi"
-                                    className="hidden"
-                                    onChange={(e) => handleRefMediaUpload(e, 'video')}
-                                  />
-                                  {seedanceRefVideoUploading ? (
-                                    <div className="flex items-center justify-center gap-2">
-                                      <Loader2 className="size-4 animate-spin text-purple-400" />
-                                      <span className="text-xs text-muted-foreground">Uploading...</span>
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center justify-center gap-2">
-                                      <Upload className="size-4 text-muted-foreground group-hover:text-purple-400 transition-colors" />
-                                      <span className="text-xs text-muted-foreground">Click to upload video</span>
-                                    </div>
-                                  )}
-                                </div>
-                                {/* URL input */}
-                                <div className="flex gap-2">
-                                  <input
-                                    type="url"
-                                    placeholder="Or paste video URL..."
-                                    value={seedanceRefVideoInput}
-                                    onChange={(e) => setSeedanceRefVideoInput(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter' && seedanceRefVideoInput.trim()) {
-                                        const total = seedanceRefVideos.length + seedanceRefVideoUrls.length
-                                        if (total >= 3) { toast.error('Maximum 3 reference videos'); return }
-                                        try {
-                                          new URL(seedanceRefVideoInput.trim())
-                                          setSeedanceRefVideoUrls(prev => [...prev, seedanceRefVideoInput.trim()])
-                                          setSeedanceRefVideoInput('')
-                                        } catch { toast.error('Invalid URL') }
-                                      }
-                                    }}
-                                    className="flex-1 h-8 px-3 rounded-lg bg-white/5 border border-white/10 text-xs placeholder:text-muted-foreground/40 focus:border-purple-500/50 focus:outline-none"
-                                    dir="ltr"
-                                  />
-                                  <button
-                                    onClick={() => {
-                                      if (!seedanceRefVideoInput.trim()) return
-                                      const total = seedanceRefVideos.length + seedanceRefVideoUrls.length
-                                      if (total >= 3) { toast.error('Maximum 3 reference videos'); return }
-                                      try {
-                                        new URL(seedanceRefVideoInput.trim())
-                                        setSeedanceRefVideoUrls(prev => [...prev, seedanceRefVideoInput.trim()])
-                                        setSeedanceRefVideoInput('')
-                                      } catch { toast.error('Invalid URL') }
-                                    }}
-                                    disabled={!seedanceRefVideoInput.trim()}
-                                    className="h-8 px-3 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-400 text-xs hover:bg-purple-500/30 transition-colors disabled:opacity-40"
-                                  >Add</button>
-                                </div>
-                                {/* Uploaded videos list */}
-                                {(seedanceRefVideos.length > 0 || seedanceRefVideoUrls.length > 0) && (
-                                  <div className="space-y-1.5">
-                                    {seedanceRefVideos.map((v, i) => (
-                                      <div key={`file-${i}`} className="flex items-center gap-2 text-xs bg-white/5 rounded-lg px-2.5 py-1.5">
-                                        <span className="text-purple-400">🎬</span>
-                                        <span className="truncate flex-1 text-muted-foreground">{v.name}</span>
-                                        <button onClick={() => setSeedanceRefVideos(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-300 shrink-0">
-                                          <X className="size-3" />
-                                        </button>
-                                      </div>
-                                    ))}
-                                    {seedanceRefVideoUrls.map((url, i) => (
-                                      <div key={`url-${i}`} className="flex items-center gap-2 text-xs bg-white/5 rounded-lg px-2.5 py-1.5">
-                                        <span className="text-purple-400">🔗</span>
-                                        <span className="truncate flex-1 text-muted-foreground font-mono" dir="ltr">{url}</span>
-                                        <button onClick={() => setSeedanceRefVideoUrls(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-300 shrink-0">
-                                          <X className="size-3" />
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Reference Audios — file upload + URL input */}
-                              <div className="space-y-2">
-                                <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                                  🎵 Reference Audios
-                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">Optional · max 3</Badge>
-                                </Label>
-                                {/* File upload button */}
-                                <div
-                                  onClick={() => seedanceRefAudioFileRef.current?.click()}
-                                  className="border-2 border-dashed border-white/10 rounded-xl p-3 text-center cursor-pointer hover:border-amber-500/30 hover:bg-amber-500/5 transition-all group"
-                                >
-                                  <input
-                                    ref={seedanceRefAudioFileRef}
-                                    type="file"
-                                    accept="audio/mp3,audio/wav,audio/m4a,audio/ogg,audio/aac"
-                                    className="hidden"
-                                    onChange={(e) => handleRefMediaUpload(e, 'audio')}
-                                  />
-                                  {seedanceRefAudioUploading ? (
-                                    <div className="flex items-center justify-center gap-2">
-                                      <Loader2 className="size-4 animate-spin text-amber-400" />
-                                      <span className="text-xs text-muted-foreground">Uploading...</span>
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center justify-center gap-2">
-                                      <Upload className="size-4 text-muted-foreground group-hover:text-amber-400 transition-colors" />
-                                      <span className="text-xs text-muted-foreground">Click to upload audio</span>
-                                    </div>
-                                  )}
-                                </div>
-                                {/* URL input */}
-                                <div className="flex gap-2">
-                                  <input
-                                    type="url"
-                                    placeholder="Or paste audio URL..."
-                                    value={seedanceRefAudioInput}
-                                    onChange={(e) => setSeedanceRefAudioInput(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter' && seedanceRefAudioInput.trim()) {
-                                        const total = seedanceRefAudios.length + seedanceRefAudioUrls.length
-                                        if (total >= 3) { toast.error('Maximum 3 reference audios'); return }
-                                        try {
-                                          new URL(seedanceRefAudioInput.trim())
-                                          setSeedanceRefAudioUrls(prev => [...prev, seedanceRefAudioInput.trim()])
-                                          setSeedanceRefAudioInput('')
-                                        } catch { toast.error('Invalid URL') }
-                                      }
-                                    }}
-                                    className="flex-1 h-8 px-3 rounded-lg bg-white/5 border border-white/10 text-xs placeholder:text-muted-foreground/40 focus:border-amber-500/50 focus:outline-none"
-                                    dir="ltr"
-                                  />
-                                  <button
-                                    onClick={() => {
-                                      if (!seedanceRefAudioInput.trim()) return
-                                      const total = seedanceRefAudios.length + seedanceRefAudioUrls.length
-                                      if (total >= 3) { toast.error('Maximum 3 reference audios'); return }
-                                      try {
-                                        new URL(seedanceRefAudioInput.trim())
-                                        setSeedanceRefAudioUrls(prev => [...prev, seedanceRefAudioInput.trim()])
-                                        setSeedanceRefAudioInput('')
-                                      } catch { toast.error('Invalid URL') }
-                                    }}
-                                    disabled={!seedanceRefAudioInput.trim()}
-                                    className="h-8 px-3 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 text-xs hover:bg-amber-500/30 transition-colors disabled:opacity-40"
-                                  >Add</button>
-                                </div>
-                                {/* Uploaded audios list */}
-                                {(seedanceRefAudios.length > 0 || seedanceRefAudioUrls.length > 0) && (
-                                  <div className="space-y-1.5">
-                                    {seedanceRefAudios.map((a, i) => (
-                                      <div key={`file-${i}`} className="flex items-center gap-2 text-xs bg-white/5 rounded-lg px-2.5 py-1.5">
-                                        <span className="text-amber-400">🎵</span>
-                                        <span className="truncate flex-1 text-muted-foreground">{a.name}</span>
-                                        <button onClick={() => setSeedanceRefAudios(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-300 shrink-0">
-                                          <X className="size-3" />
-                                        </button>
-                                      </div>
-                                    ))}
-                                    {seedanceRefAudioUrls.map((url, i) => (
-                                      <div key={`url-${i}`} className="flex items-center gap-2 text-xs bg-white/5 rounded-lg px-2.5 py-1.5">
-                                        <span className="text-amber-400">🔗</span>
-                                        <span className="truncate flex-1 text-muted-foreground font-mono" dir="ltr">{url}</span>
-                                        <button onClick={() => setSeedanceRefAudioUrls(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-300 shrink-0">
-                                          <X className="size-3" />
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
                               </div>
                             </div>
                           ) : isVeoModel || isKlingModel || isGptImage2Model ? null : (
