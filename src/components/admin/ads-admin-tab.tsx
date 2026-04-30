@@ -397,6 +397,7 @@ export function AdsAdminTab() {
                       <SelectContent>
                         <SelectItem value="google">Google AdSense</SelectItem>
                         <SelectItem value="propeller">PropellerAds</SelectItem>
+                        <SelectItem value="monetag">Monetag</SelectItem>
                         <SelectItem value="popads">PopAds</SelectItem>
                         <SelectItem value="adsterra">Adsterra</SelectItem>
                         <SelectItem value="media.net">Media.net</SelectItem>
@@ -687,8 +688,8 @@ export function AdsAdminTab() {
         </CardHeader>
         <CardContent>
           <p className="text-xs text-muted-foreground mb-3">
-            Push notification ad scripts (PushEngage, OneSignal, Notix, etc.) are loaded automatically. 
-            Users see a permission prompt to allow browser notifications. Only shows to free users.
+            Push notification ad scripts (Monetag, PropellerAds, OneSignal, Notix, etc.) are loaded automatically. 
+            The ad network handles its own permission prompt and subscription flow. Only shows to free users.
           </p>
           {pushAds.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">No push notification ads yet</p>
