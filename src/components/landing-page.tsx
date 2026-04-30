@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import { useAppStore } from '@/store/app-store'
 import { GoogleLoginButton } from '@/components/auth/google-login-button'
 import { AdBanner } from '@/components/ad-banner'
+import { PushNotificationBanner } from '@/components/push-notification-banner'
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -228,6 +229,7 @@ export function LandingPage() {
       {showAds && (
         <div className="max-w-4xl mx-auto px-4 mb-4 overflow-hidden">
           <AdBanner position="landing" showAds={showAds} />
+          <PushNotificationBanner showAds={showAds} />
         </div>
       )}
 

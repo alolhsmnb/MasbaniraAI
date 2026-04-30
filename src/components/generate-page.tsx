@@ -36,6 +36,7 @@ import {
 import { compressImage } from '@/lib/utils'
 import { CryptoPaymentModal } from '@/components/crypto-payment-modal'
 import { AdBanner } from '@/components/ad-banner'
+import { PushNotificationBanner } from '@/components/push-notification-banner'
 
 interface Model {
   id: string
@@ -2179,6 +2180,7 @@ export function GeneratePage() {
 
           {/* Ad Banner - Between columns on mobile, below results on desktop */}
           <AdBanner position="generate" showAds={showAds} />
+          <PushNotificationBanner showAds={showAds} />
 
           {/* Recent Generations */}
           {recentGenerations.length > 0 && (
