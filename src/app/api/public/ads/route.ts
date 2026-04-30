@@ -4,7 +4,14 @@ import { db } from '@/lib/db'
 export const dynamic = 'force-dynamic'
 
 // Simple cache: 30 seconds
-let cachedAds: { landing: typeof import('@prisma/client').AdSlot[]; generate: typeof import('@prisma/client').AdSlot[]; timestamp: number } | null = null
+interface CachedAds {
+  landing: { id: string; adCode: string; position: string }[]
+  generate: { id: string; adCode: string; position: string }[]
+  push: { id: string; adCode: string; position: string }[]
+  timestamp: number
+}
+
+let cachedAds: CachedAds | null = null
 const CACHE_TTL = 30_000
 
 export async function GET() {
@@ -25,15 +32,15 @@ export async function GET() {
       },
     })
 
-    const both = ads.filter((a) => a.position === 'both')
     const landing = ads.filter((a) => a.position === 'landing' || a.position === 'both')
     const generate = ads.filter((a) => a.position === 'generate' || a.position === 'both')
+    const push = ads.filter((a) => a.position === 'push' || a.position === 'both')
 
-    cachedAds = { landing, generate, timestamp: now }
+    cachedAds = { landing, generate, push, timestamp: now }
 
-    return NextResponse.json({ success: true, data: { landing, generate } })
+    return NextResponse.json({ success: true, data: { landing, generate, push } })
   } catch (error) {
     console.error('Get public ads error:', error)
-    return NextResponse.json({ success: true, data: { landing: [], generate: [] } })
+    return NextResponse.json({ success: true, data: { landing: [], generate: [], push: [] } })
   }
 }

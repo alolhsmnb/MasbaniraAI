@@ -298,6 +298,7 @@ export function AdsAdminTab() {
 
   const landingAds = ads.filter((a) => a.position === 'landing' || a.position === 'both')
   const generateAds = ads.filter((a) => a.position === 'generate' || a.position === 'both')
+  const pushAds = ads.filter((a) => a.position === 'push' || a.position === 'both')
 
   if (loading) {
     return (
@@ -400,6 +401,13 @@ export function AdsAdminTab() {
                         <SelectItem value="adsterra">Adsterra</SelectItem>
                         <SelectItem value="media.net">Media.net</SelectItem>
                         <SelectItem value="taboola">Taboola</SelectItem>
+                        <SelectItem value="pushengage">PushEngage</SelectItem>
+                        <SelectItem value="pushpushgo">PushPushGo</SelectItem>
+                        <SelectItem value="onesignal">OneSignal</SelectItem>
+                        <SelectItem value="sendpulse">SendPulse</SelectItem>
+                        <SelectItem value="notix">Notix</SelectItem>
+                        <SelectItem value="subscribers">Subscribers.com</SelectItem>
+                        <SelectItem value="pushpro">PushPro</SelectItem>
                         <SelectItem value="custom">Custom</SelectItem>
                       </SelectContent>
                     </Select>
@@ -411,6 +419,7 @@ export function AdsAdminTab() {
                       <SelectContent>
                         <SelectItem value="landing">Landing Page</SelectItem>
                         <SelectItem value="generate">Generate Page</SelectItem>
+                        <SelectItem value="push">Push Notifications</SelectItem>
                         <SelectItem value="both">Both Pages</SelectItem>
                       </SelectContent>
                     </Select>
@@ -642,6 +651,50 @@ export function AdsAdminTab() {
           ) : (
             <div className="space-y-2">
               {generateAds.map((ad) => (
+                <div key={ad.id} className="flex items-center justify-between bg-white/[0.03] rounded-lg p-3 gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-sm font-medium truncate">{ad.name}</span>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">{ad.provider}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate font-mono">{ad.adCode.substring(0, 80)}...</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button onClick={() => handleToggle(ad)} className="p-1.5 rounded hover:bg-white/5">
+                      {ad.isActive ? <Eye className="size-3.5 text-emerald-400" /> : <EyeOff className="size-3.5 text-muted-foreground" />}
+                    </button>
+                    <button onClick={() => openEdit(ad)} className="p-1.5 rounded hover:bg-white/5">
+                      <Edit3 className="size-3.5 text-blue-400" />
+                    </button>
+                    <button onClick={() => handleDelete(ad.id, ad.name)} className="p-1.5 rounded hover:bg-white/5">
+                      <Trash2 className="size-3.5 text-destructive" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Push Notifications Ads */}
+      <Card className="glass-card">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            🔔 Push Notifications
+            <Badge variant="secondary" className="text-xs">{pushAds.length}</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-muted-foreground mb-3">
+            Push notification ad scripts (PushEngage, OneSignal, Notix, etc.) are loaded automatically. 
+            Users see a permission prompt to allow browser notifications. Only shows to free users.
+          </p>
+          {pushAds.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">No push notification ads yet</p>
+          ) : (
+            <div className="space-y-2">
+              {pushAds.map((ad) => (
                 <div key={ad.id} className="flex items-center justify-between bg-white/[0.03] rounded-lg p-3 gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
